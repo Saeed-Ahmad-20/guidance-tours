@@ -18,9 +18,9 @@ export const metadata: Metadata = {
   description:
     "Join Guidance Tours on our first Umrah departure to the sacred cities of Makkah and Madinah, 25 October – 4 November 2025. Register your interest today.",
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
-    shortcut: "/logo.png",
+    icon: "/images/logo.png",
+    apple: "/images/logo.png",
+    shortcut: "/images/logo.png",
   },
   openGraph: {
     title: "Guidance Tours — Umrah 2025",
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
       "Join Guidance Tours on our first Umrah departure to the sacred cities of Makkah and Madinah, 25 October – 4 November 2025.",
     images: [
       {
-        url: "/logo.png",
+        url: "/images/logo.png",
         width: 1200,
         height: 630,
         alt: "Guidance Tours",

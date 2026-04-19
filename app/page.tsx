@@ -5,23 +5,24 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-[#F8F7F3]">
       {/* Hero */}
-      <section className="flex flex-col items-center text-center px-6 pt-8 pb-8">
+      <section className="flex flex-col items-center text-center px-6 pt-8 pb-">
         <Image
-          src="/logo.png"
+          src="/images/logo.png"
           alt="Guidance Tours"
-          width={500}
-          height={500}
+          width={350}
+          height={350}
           priority
+          className="mb-8"
         />
 
-        <h1 className="text-4xl sm:text-5xl font-bold text-zinc-900 max-w-2xl leading-tight mb-2">
+        <h1 className="text-4xl sm:text-5xl font-bold text-zinc-900 max-w-2xl leading-tight mb-6">
           Our First Umrah Journey{' '}
           <span className="text-[#C4A348]">Is Being Prepared</span>
         </h1>
 
         <div className="flex items-center gap-2 mb-7 text-zinc-500">
           <svg
-            className="w-12 h-12 text-[#C4A348]"
+            className="w-12 h-12 text-[#C4A348] shrink-0"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -43,7 +44,7 @@ export default function Home() {
           We are honoured to announce that Guidance Tours is preparing its first
           blessed journey to the sacred cities of Makkah and Madinah.
           Register your interest below and we will be in touch with all the
-          details as soon as they are available.
+          details soon for you to confirm your place.
         </p>
       </section>
 
