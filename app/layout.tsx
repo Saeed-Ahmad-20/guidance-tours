@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import Navbar from "./components/navbar";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,18 +15,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Guidance Tours — Umrah 2025",
+  title: "Guidance Tours",
   description:
-    "Join Guidance Tours on our first Umrah departure to the sacred cities of Makkah and Madinah, 25 October – 4 November 2025. Register your interest today.",
+    "Guidance Tours — blessed journeys to the sacred cities of Makkah and Madinah.",
   icons: {
     icon: "/images/logo.png",
     apple: "/images/logo.png",
     shortcut: "/images/logo.png",
   },
   openGraph: {
-    title: "Guidance Tours — Umrah 2025",
+    title: "Guidance Tours",
     description:
-      "Join Guidance Tours on our first Umrah departure to the sacred cities of Makkah and Madinah, 25 October – 4 November 2025.",
+      "Guidance Tours — blessed journeys to the sacred cities of Makkah and Madinah.",
     images: [
       {
         url: "/images/logo.png",
@@ -48,8 +49,14 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        {children}
+      <body className="min-h-full flex flex-col bg-[#F8F7F3]">
+        <Navbar />
+        <main className="flex-1 flex flex-col">
+          {children}
+        </main>
+        <footer className="border-t border-stone-200 text-zinc-400 text-center text-xs py-5 px-6">
+          © {new Date().getFullYear()} Guidance Tours · All rights reserved
+        </footer>
         <Analytics />
       </body>
     </html>
