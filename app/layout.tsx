@@ -55,7 +55,7 @@ export default function RootLayout({
         <main className="flex-1 flex flex-col">
           {children}
         </main>
-        <footer className="border-t border-stone-200 text-zinc-400 text-center text-xs py-5 px-6">
+        <footer className="border-t border-stone-200 text-stone-400 text-center text-xs py-5 px-6">
           © {new Date().getFullYear()} Guidance Tours · All rights reserved
         </footer>
         <Analytics />

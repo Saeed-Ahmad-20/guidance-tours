@@ -26,7 +26,7 @@ export default function Navbar() {
             height={36}
             className="rounded-sm"
           />
-          <span className="font-semibold text-zinc-900 text-base tracking-tight">
+          <span className="font-semibold text-stone-900 text-base tracking-tight">
             Guidance Tours
           </span>
         </Link>
@@ -39,7 +39,7 @@ export default function Navbar() {
                 className={`text-base font-medium transition-colors ${
                   pathname === href
                     ? 'text-[#C4A348]'
-                    : 'text-zinc-600 hover:text-zinc-900'
+                    : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 {label}
@@ -49,7 +49,7 @@ export default function Navbar() {
         </ul>
 
         <button
-          className="sm:hidden p-2 text-zinc-600 hover:text-zinc-900"
+          className="sm:hidden p-2 text-stone-600 hover:text-stone-900"
           onClick={() => setOpen((o) => !o)}
           aria-label="Toggle menu"
         >
@@ -75,7 +75,7 @@ export default function Navbar() {
                 className={`text-sm font-medium transition-colors ${
                   pathname === href
                     ? 'text-[#C4A348]'
-                    : 'text-zinc-600 hover:text-zinc-900'
+                    : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 {label}
