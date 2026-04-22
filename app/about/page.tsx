@@ -18,7 +18,7 @@ const values = [
       </svg>
     ),
     title: 'خدمت — Service',
-    desc: 'Serving pilgrims with sincerity, care, and attention to every detail',
+    desc: 'Serving our travellers with sincerity, care, and attention to every detail',
   },
   {
     icon: (
@@ -35,8 +35,8 @@ const values = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" />
       </svg>
     ),
-    title: 'عبادہ — Worship Focus',
-    desc: 'We handle the logistics so you can fully dedicate yourself to worship',
+    title: 'Meaningful Journeys',
+    desc: 'We handle the logistics so you can fully immerse yourself in every experience',
   },
   {
     icon: (
@@ -45,7 +45,7 @@ const values = [
       </svg>
     ),
     title: 'Personal Touch',
-    desc: 'Every pilgrim is treated as family — because that\'s what you are to us',
+    desc: 'Every traveller is treated as family — because that\'s what you are to us',
   },
 ]
 
@@ -53,24 +53,24 @@ const teachers = [
   {
     name: 'Shaykh Waseem Ahmed',
     image: '/images/Shaykh Waseem.webp',
-    bio: `Imagine performing your Umrah guided by a scholar who spent years walking the ancient streets of Damascus, studying at the feet of some of the Muslim world's most revered teachers. That's exactly what you'll experience with Shaykh Waseem Ahmed by your side.
+    bio: `Imagine embarking on a journey guided by a scholar who spent years walking the ancient streets of Damascus, studying at the feet of some of the Muslim world's most revered teachers. That's exactly what you'll experience with Shaykh Waseem Ahmed by your side.
 
 Shaykh Waseem's journey into sacred knowledge began with intensive Arabic studies in the UK before he moved to Damascus in 2005, immersing himself fully in the Islamic scholarly tradition. Under the personal mentorship of luminaries such as Shaykh Ahmad Al-Khatib, Shaykh Anas Al-Sharfawi, Shaykh Muhammad Al-Yaqoubi, and Shaykh Muhammad Jumu'a, he completed rigorous studies spanning Aqidah (Doctrine), Fiqh (Jurisprudence), Spirituality, Arabic Grammar, and Rhetoric — graduating from the prestigious Dawli Institute in 2012.
 
-Since returning to the UK, Shaykh Waseem has become one of the most sought-after Islamic educators in the country, delivering transformative lectures and courses nationwide. As co-founder of the ISNAD Institute and director of Guidance Hub, he brings not just deep knowledge but a rare ability to make the sacred sciences come alive — turning every moment of your Umrah journey into an opportunity for spiritual growth and lasting connection with the Divine.`,
-    quote: 'Do not set out on a journey except to three mosques: Al-Masjid Al-Haram, this mosque of mine, and Al-Masjid Al-Aqsa.',
-    quoteRef: '— Prophet Muhammad ﷺ (Sahih al-Bukhari, 1189)',
+Since returning to the UK, Shaykh Waseem has become one of the most sought-after Islamic educators in the country, delivering transformative lectures and courses nationwide. As co-founder of the ISNAD Institute and director of Guidance Hub, he brings not just deep knowledge but a rare ability to make the sacred sciences come alive — turning every moment of your journey into an opportunity for spiritual growth and lasting connection with the Divine.`,
+    quote: 'Travel through the land and observe how He began creation.',
+    quoteRef: '— Qur\'an (29:20)',
   },
   {
     name: 'Ustadh Saqib Rashid',
     image: '/images/Ustadh Saqib.jpeg',
-    bio: `Your Umrah experience will be further enriched by the presence of Ustadh Saqib Rashid — a dedicated teacher, gifted munshid, and scholar whose passion for authentic Islamic learning and spiritual devotion is truly contagious.
+    bio: `Your travel experience will be further enriched by the presence of Ustadh Saqib Rashid — a dedicated teacher, gifted munshid, and scholar whose passion for authentic Islamic learning and spiritual devotion is truly contagious.
 
 With a strong foundation in the traditional Dars e Nizami programme and advanced Arabic Grammar & Language, Ustadh Saqib has pursued knowledge both in the UK and abroad, studying under the guidance of distinguished Syrian and Egyptian scholars. He is currently deepening his expertise in the Maliki School of Law under qualified Egyptian jurists while studying with the renowned Shaykh Ahmed Saad Al-Azhary, and is actively advancing his knowledge of Qur'anic recitation (Qiraat) with Syrian masters.
 
-Beyond his scholarly pursuits, Ustadh Saqib is a talented munshid whose soul-stirring nasheeds have moved hearts across communities. Whether he's leading a heartfelt nasheed gathering under the Madinah night sky, breaking down a point of sacred law during a morning class, or helping you perfect the recitation you'll carry into Tawaf — Ustadh Saqib's warmth, spiritual presence, and dedication will make your journey truly unforgettable.`,
-    quote: 'The performers of Umrah are the guests of Allah. He called them and they answered, and they ask of Him and He gives them.',
-    quoteRef: '— Prophet Muhammad ﷺ (Sunan Ibn Majah, 2892)',
+Beyond his scholarly pursuits, Ustadh Saqib is a talented munshid whose soul-stirring nasheeds have moved hearts across communities. Whether he's leading a heartfelt nasheed gathering under the night sky, breaking down a point of sacred law during a morning class, or helping you perfect your recitation — Ustadh Saqib's warmth, spiritual presence, and dedication will make your journey truly unforgettable.`,
+    quote: 'Whoever takes a path to seek knowledge, Allah will make easy for him the path to Paradise.',
+    quoteRef: '— Prophet Muhammad ﷺ (Sahih Muslim, 2699)',
   },
 ]
 
@@ -246,7 +246,7 @@ export default function AboutPage() {
   return (
     <div className="w-full bg-stone-50 overflow-hidden">
       {/* ═══════════════════════════════════
-          HERO — REDESIGNED (NO TEAM MEMBERS)
+          HERO
           ═══════════════════════════════════ */}
       <section className="relative min-h-[60vh] sm:min-h-[70vh] flex items-center justify-center overflow-hidden">
         {/* Background */}
@@ -309,12 +309,12 @@ export default function AboutPage() {
             transition={{ duration: 0.8, delay: 0.3 }}
             className="text-3xl sm:text-5xl md:text-6xl font-bold text-white mb-4 sm:mb-5 tracking-tight"
           >
-            Guiding You{' '}
+            Journeys That{' '}
             <span className="bg-gradient-to-r from-[#C4A348] to-[#E8D48B] bg-clip-text text-transparent">
-              Closer
+              Inspire
             </span>
             <br className="hidden sm:block" />
-            {' '}to the Sacred
+            {' '}& Transform
           </motion.h1>
 
           <motion.p
@@ -326,7 +326,7 @@ export default function AboutPage() {
             A team built on{' '}
             <span className="text-[#C4A348] font-semibold">خدمت</span> (service),{' '}
             <span className="text-[#C4A348] font-semibold">trust</span>, and a deep love for
-            helping pilgrims experience the journey of a lifetime
+            helping travellers experience journeys of a lifetime
           </motion.p>
 
           {/* Decorative divider */}
@@ -420,14 +420,14 @@ export default function AboutPage() {
 
                 <div className="space-y-4 sm:space-y-6 text-center sm:text-left">
                   <p className="text-stone-300 leading-relaxed text-sm sm:text-base md:text-lg">
-                    Our mission is to support and guide pilgrims through their sacred Umrah journey with care, sincerity, and attention to every detail.
+                    Our mission is to guide travellers through meaningful sacred and cultural journeys with care, sincerity, and attention to every detail.
                   </p>
                   <p className="text-stone-300/80 leading-relaxed text-xs sm:text-sm md:text-base">
-                    We understand how important this journey is, both spiritually and personally. That&apos;s why we focus on making your experience as smooth and stress-free as possible, handling the planning, coordination, and on-ground support so you can fully dedicate yourself to{' '}
-                    <span className="text-[#C4A348] font-semibold">عبادہ</span> (worship).
+                    We understand how important these journeys are, both spiritually and personally. That&apos;s why we focus on making your experience as smooth and stress-free as possible, handling the planning, coordination, and on-ground support so you can fully dedicate yourself to what matters most — whether that&apos;s{' '}
+                    <span className="text-[#C4A348] font-semibold">عبادہ</span> (worship), exploration, or reflection.
                   </p>
                   <p className="text-stone-300/80 leading-relaxed text-xs sm:text-sm md:text-base">
-                    Alongside Umrah, we also offer thoughtfully arranged guided tours, designed to provide comfort, insight, and memorable experiences. For us, it&apos;s not just about travel — it&apos;s about creating a journey that is meaningful, enriching, and truly special.
+                    From Umrah to cultural tours and beyond, we offer thoughtfully arranged experiences designed to provide comfort, insight, and lasting memories. For us, it&apos;s not just about travel — it&apos;s about creating journeys that are meaningful, enriching, and truly special.
                   </p>
                   <p className="text-stone-300/80 leading-relaxed text-xs sm:text-sm md:text-base">
                     We are committed to serving you with trust, reliability, and a personal touch every step of the way.
@@ -497,7 +497,7 @@ export default function AboutPage() {
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-stone-200 to-transparent" />
 
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <SectionHeading subtitle="Your guides on this sacred journey — scholars who bring knowledge to life">
+          <SectionHeading subtitle="Scholars and educators who accompany our journeys and bring knowledge to life">
             Your Teachers
           </SectionHeading>
 
@@ -622,7 +622,7 @@ export default function AboutPage() {
           <div className="relative max-w-4xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-between gap-5 sm:gap-6 sm:flex-row">
             <div className="text-center sm:text-left">
               <p className="text-[#C4A348] font-bold uppercase tracking-[0.2em] text-[10px] mb-1">Ready to begin?</p>
-              <p className="text-white font-semibold text-base sm:text-lg">Let us help you plan your journey</p>
+              <p className="text-white font-semibold text-base sm:text-lg">Let us help you plan your next journey</p>
             </div>
 
             <div className="flex items-center gap-3 sm:gap-4 flex-wrap justify-center">
