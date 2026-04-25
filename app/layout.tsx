@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import Navbar from "./components/navbar";
+import SiteFooter from "./components/site-footer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -55,9 +56,7 @@ export default function RootLayout({
         <main className="flex-1 flex flex-col">
           {children}
         </main>
-        <footer className="border-t border-stone-200 text-stone-400 text-center text-xs py-5 px-6">
-          © {new Date().getFullYear()} Guidance Tours · All rights reserved
-        </footer>
+        <SiteFooter />
         <Analytics />
       </body>
     </html>

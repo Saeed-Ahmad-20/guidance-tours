@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import Link from 'next/link'
 import { motion, useInView } from 'framer-motion'
 import { useRef, useEffect, useState } from 'react'
 
@@ -409,11 +410,32 @@ export default function Umrah2026Page() {
           </motion.div>
 
           <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 1.0 }}
+            className="mt-8 sm:mt-12 flex justify-center"
+          >
+            <Link
+              href="/umrah-2026/book"
+              className="group relative inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-[#C4A348] to-[#E8D48B] text-[#2C1F0E] font-bold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-lg shadow-[#C4A348]/20 hover:shadow-xl hover:shadow-[#C4A348]/30 hover:-translate-y-0.5 transition-all duration-300"
+            >
+              <span>Reserve Your Place</span>
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 group-hover:translate-x-1"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17.25 8.25L21 12m0 0l-3.75 3.75M21 12H3" />
+              </svg>
+            </Link>
+          </motion.div>
+
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1.5 }}
-            className="mt-10 sm:mt-16"
-            /* FIXED: Reduced margin on mobile */
+            className="mt-8 sm:mt-12"
           >
             <motion.div
               animate={{ y: [0, 8, 0] }}
@@ -599,6 +621,20 @@ export default function Umrah2026Page() {
                   {/* FIXED: Smaller text, added px for breathing room */}
                   Deposit is non-refundable · Balance due 8 weeks before departure
                 </p>
+                <Link
+                  href="/umrah-2026/book"
+                  className="group mt-5 sm:mt-6 inline-flex items-center gap-2 bg-gradient-to-r from-[#C4A348] to-[#E8D48B] text-[#2C1F0E] font-bold text-sm sm:text-base px-6 sm:px-8 py-3 rounded-full shadow-lg shadow-[#C4A348]/20 hover:shadow-xl hover:shadow-[#C4A348]/30 hover:-translate-y-0.5 transition-all duration-300"
+                >
+                  <span>Book Now</span>
+                  <svg
+                    className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17.25 8.25L21 12m0 0l-3.75 3.75M21 12H3" />
+                  </svg>
+                </Link>
               </div>
             </motion.div>
           </FadeInWhenVisible>

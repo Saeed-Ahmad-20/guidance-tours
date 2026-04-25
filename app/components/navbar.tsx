@@ -9,11 +9,14 @@ const links = [
   { href: '/', label: 'Home' },
   { href: '/about', label: 'About Us' },
   { href: '/umrah-2026', label: 'Umrah 2026' },
+  { href: '/portal', label: 'My Booking' },
 ]
 
 export default function Navbar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+
+  if (pathname?.startsWith('/admin')) return null
 
   return (
     <nav className="bg-[#F8F7F3] border-b border-stone-200 sticky top-0 z-50">
