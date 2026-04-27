@@ -366,8 +366,8 @@ export default function Umrah2026Page() {
               <div className="w-full h-px bg-gradient-to-r from-transparent via-[#C4A348]/20 to-transparent mb-3" />
 
               <div className="text-center">
-                <p className="text-xs text-white font-medium">Jummah in Madinah</p>
-                <p className="text-[10px] text-stone-400 mt-0.5">Madinah First · Return from Makkah</p>
+                <p className="text-sm font-semibold text-[#C4A348]">Jummah in Madinah</p>
+                <p className="text-[11px] text-stone-300 mt-1 leading-snug">Madinah First · Return from Makkah</p>
               </div>
             </div>
 
@@ -387,10 +387,10 @@ export default function Umrah2026Page() {
                 <div className="w-px h-4 bg-[#C4A348]/40" />
               </div>
 
-              <div className="text-center space-y-1.5 max-w-[160px]">
-                <p className="text-sm text-white font-medium">Jummah in Madinah</p>
-                <div className="w-6 h-px bg-[#C4A348]/40 mx-auto" />
-                <p className="text-xs text-stone-400">Madinah First · Return from Makkah</p>
+              <div className="text-center space-y-2 max-w-[220px]">
+                <p className="text-2xl md:text-4xl lg:text-2xl font-bold text-[#C4A348] leading-tight whitespace-nowrap">Jummah in Madinah</p>
+                <div className="w-10 h-px bg-[#C4A348]/40 mx-auto" />
+                <p className="text-l text-stone-300 leading-snug">Madinah First · Return from Makkah</p>
               </div>
 
               <div className="flex flex-col items-center gap-1">
