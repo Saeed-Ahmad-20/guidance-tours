@@ -1,21 +1,21 @@
 'use server'
 
-import { redirect } from 'next/navigation'
 import { supabaseAdmin } from '../lib/supabase-admin'
 import { sendBookingCreated } from '../lib/emails'
+import { checkRateLimit, clientIp } from '../lib/rate-limit'
+import { generateReservationCode } from '../lib/reservation-code'
 import {
+  BOOKING_TTL_HOURS,
   DEPOSIT_PER_PERSON_GBP,
   Passenger,
   RoomSelection,
   TOTAL_PLACES,
   TOUR_SLUG,
-  generateReservationCode,
+  isValidEmail,
   passportNeedsRenewal,
   totalCostGBP,
   totalPeople,
 } from '../lib/booking'
-
-const TTL_HOURS = Number(process.env.BOOKING_TTL_HOURS ?? 30)
 
 export type AvailabilityResult = {
   total: number
@@ -60,6 +60,13 @@ export async function createBooking(
     return { ok: false, error: 'validation', message: 'Passenger count does not match rooms.' }
   if (!leadSurname.trim() || !leadGivenNames.trim())
     return { ok: false, error: 'validation', message: 'Lead Passenger name is required.' }
+  if (leadEmail && !isValidEmail(leadEmail.trim()))
+    return { ok: false, error: 'validation', message: 'Lead email is not a valid address.' }
+
+  const ip = await clientIp()
+  if (!checkRateLimit('createBooking', ip, 8, 60 * 60 * 1000)) {
+    return { ok: false, error: 'server', message: 'Too many booking attempts. Please try again later.' }
+  }
 
   const today = new Date().toISOString().slice(0, 10)
   for (const p of passengers) {
@@ -92,7 +99,7 @@ export async function createBooking(
       p_total_people: people,
       p_total_cost_gbp: cost,
       p_deposit_amount_gbp: deposit,
-      p_ttl_hours: TTL_HOURS,
+      p_ttl_hours: BOOKING_TTL_HOURS,
       p_passengers: passengers,
     })
 
@@ -125,12 +132,6 @@ export async function createBooking(
   return { ok: false, error: 'server', message: 'Could not allocate a reservation code. Please try again.' }
 }
 
-export async function createBookingAndRedirect(input: CreateBookingInput): Promise<CreateBookingResult> {
-  const result = await createBooking(input)
-  if (result.ok) redirect(`/umrah-2026/book/confirmation/${result.code}`)
-  return result
-}
-
 export type WaitingListInput = {
   name: string
   email: string
@@ -143,6 +144,12 @@ export async function joinWaitingList(input: WaitingListInput): Promise<{ ok: bo
   const email = input.email.trim()
   const people = Math.max(1, Math.floor(input.peopleRequested))
   if (!name || !email) return { ok: false, error: 'Name and email are required.' }
+  if (!isValidEmail(email)) return { ok: false, error: 'Please enter a valid email address.' }
+
+  const ip = await clientIp()
+  if (!checkRateLimit('joinWaitingList', ip, 10, 60 * 60 * 1000)) {
+    return { ok: false, error: 'Too many requests. Please try again later.' }
+  }
 
   const db = supabaseAdmin()
   const { data: tour, error: tourErr } = await db

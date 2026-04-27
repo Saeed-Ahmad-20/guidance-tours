@@ -1,46 +1,28 @@
 'use server'
 
-import { cookies, headers } from 'next/headers'
+import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { timingSafeEqual } from 'node:crypto'
 import { supabaseAdmin } from '../lib/supabase-admin'
-import { sendDepositConfirmed, sendStatusReverted } from '../lib/emails'
+import {
+  sendBookingCancelled,
+  sendDepositConfirmed,
+  sendStatusReverted,
+} from '../lib/emails'
 import {
   ADMIN_COOKIE,
   getAdminUser,
   signAdminSession,
 } from '../lib/admin-session'
-import { ROOM_PRICE_GBP, passportNeedsRenewal } from '../lib/booking'
+import {
+  BOOKING_TTL_HOURS,
+  ROOM_PRICE_GBP,
+  isValidEmail,
+  passportNeedsRenewal,
+} from '../lib/booking'
+import { checkRateLimit, clientIp, resetRateLimit } from '../lib/rate-limit'
 
 const isProd = process.env.NODE_ENV === 'production'
-
-const loginAttempts = new Map<string, { count: number; firstAt: number }>()
-const WINDOW_MS = 15 * 60 * 1000
-const MAX_ATTEMPTS = 8
-
-async function clientIp(): Promise<string> {
-  const h = await headers()
-  return (
-    h.get('x-forwarded-for')?.split(',')[0].trim() ||
-    h.get('x-real-ip') ||
-    'unknown'
-  )
-}
-
-function recordAttempt(ip: string): boolean {
-  const now = Date.now()
-  const entry = loginAttempts.get(ip)
-  if (!entry || now - entry.firstAt > WINDOW_MS) {
-    loginAttempts.set(ip, { count: 1, firstAt: now })
-    return true
-  }
-  entry.count++
-  return entry.count <= MAX_ATTEMPTS
-}
-
-function clearAttempts(ip: string) {
-  loginAttempts.delete(ip)
-}
 
 function safeEqualStr(a: string, b: string): boolean {
   const ab = Buffer.from(a)
@@ -56,7 +38,7 @@ export async function adminLogin(formData: FormData): Promise<AdminLoginResult> 
   const password = (formData.get('password') as string | null) ?? ''
 
   const ip = await clientIp()
-  if (!recordAttempt(ip)) {
+  if (!checkRateLimit('adminLogin', ip, 8, 15 * 60 * 1000)) {
     return { ok: false, error: 'Too many attempts. Please try again later.' }
   }
 
@@ -72,7 +54,7 @@ export async function adminLogin(formData: FormData): Promise<AdminLoginResult> 
     return { ok: false, error: 'Invalid username or password.' }
   }
 
-  clearAttempts(ip)
+  resetRateLimit('adminLogin', ip)
   const { value, maxAge } = signAdminSession(username)
   const store = await cookies()
   store.set(ADMIN_COOKIE, value, {
@@ -130,11 +112,21 @@ export async function confirmDeposit(
 
   const isPartial = amountReceived !== undefined && amountReceived < row.deposit_amount_gbp
 
+  const partialExpiry = new Date(
+    Date.now() + BOOKING_TTL_HOURS * 60 * 60 * 1000
+  ).toISOString()
+
   const { error } = await db
     .from('reservations')
     .update(
       isPartial
-        ? { status: 'pending_payment', deposit_received_gbp: amountReceived, admin_note: null }
+        ? {
+            status: 'pending_payment',
+            deposit_received_gbp: amountReceived,
+            admin_note: null,
+            transfer_submitted_at: null,
+            expires_at: partialExpiry,
+          }
         : { status: 'confirmed', confirmed_at: new Date().toISOString(), confirmed_by: admin, deposit_received_gbp: null, admin_note: null }
     )
     .eq('id', reservationId)
@@ -184,8 +176,7 @@ export async function revertToPending(
   if (!['transfer_submitted', 'confirmed'].includes(row.status))
     return { ok: false, error: `Cannot revert a ${row.status} booking to pending.` }
 
-  const ttlHours = Number(process.env.BOOKING_TTL_HOURS ?? 30)
-  const newExpiry = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString()
+  const newExpiry = new Date(Date.now() + BOOKING_TTL_HOURS * 60 * 60 * 1000).toISOString()
 
   const { error } = await db
     .from('reservations')
@@ -229,11 +220,16 @@ export async function adminUpdateLeadContact(
   const admin = await requireAdmin().catch(() => null)
   if (!admin) return { ok: false, error: 'Not authorised.' }
 
+  const trimmedEmail = email.trim()
+  if (trimmedEmail && !isValidEmail(trimmedEmail)) {
+    return { ok: false, error: 'Email is not a valid address.' }
+  }
+
   const db = supabaseAdmin()
   const { error } = await db
     .from('reservations')
     .update({
-      lead_email: email.trim() || null,
+      lead_email: trimmedEmail || null,
       lead_phone: phone.trim() || null,
     })
     .eq('id', reservationId)
@@ -276,6 +272,28 @@ export async function adminUpdatePassenger(
 
   if (fetchPErr || !currentP) return { ok: false, error: 'Passenger not found.' }
 
+  const givenNames = data.given_names.trim()
+  const surname = data.surname.trim()
+  if (!givenNames || !surname) {
+    return { ok: false, error: 'Name fields are required.' }
+  }
+  if (givenNames.length > 100 || surname.length > 100) {
+    return { ok: false, error: 'Name fields must be 100 characters or fewer.' }
+  }
+  if (data.person_type !== 'adult' && data.person_type !== 'infant') {
+    return { ok: false, error: 'Invalid person type.' }
+  }
+  if (data.room_type !== 'quad' && data.room_type !== 'triple' && data.room_type !== 'double') {
+    return { ok: false, error: 'Invalid room type.' }
+  }
+  const today = new Date().toISOString().slice(0, 10)
+  if (!data.date_of_birth || data.date_of_birth < '1900-01-01' || data.date_of_birth >= today) {
+    return { ok: false, error: 'Date of birth must be between 1 Jan 1900 and today.' }
+  }
+  if (!data.passport_expiry || data.passport_expiry < today) {
+    return { ok: false, error: 'Passport expiry must be today or later.' }
+  }
+
   const currentRoomType = (currentP as { room_type: string }).room_type
   const passport_renewal_required = passportNeedsRenewal(data.passport_expiry)
 
@@ -291,8 +309,8 @@ export async function adminUpdatePassenger(
   }
 
   const updateData: Record<string, unknown> = {
-    given_names: data.given_names.trim(),
-    surname: data.surname.trim(),
+    given_names: givenNames,
+    surname,
     person_type: data.person_type,
     date_of_birth: data.date_of_birth,
     passport_expiry: data.passport_expiry,
@@ -350,6 +368,18 @@ export async function cancelBooking(reservationId: string): Promise<AdminActionR
   if (!admin) return { ok: false, error: 'Not authorised.' }
 
   const db = supabaseAdmin()
+  const { data: current, error: fetchErr } = await db
+    .from('reservations')
+    .select('reservation_code, lead_given_names, lead_email, status')
+    .eq('id', reservationId)
+    .maybeSingle()
+
+  if (fetchErr) {
+    console.error('cancelBooking lookup error:', fetchErr.message)
+  } else if (!current) {
+    console.warn('cancelBooking: reservation not found, id=', reservationId)
+  }
+
   const { error } = await db
     .from('reservations')
     .update({
@@ -362,6 +392,22 @@ export async function cancelBooking(reservationId: string): Promise<AdminActionR
   if (error) {
     console.error('cancelBooking error:', error.message)
     return { ok: false, error: 'Could not cancel booking.' }
+  }
+
+  if (current) {
+    const row = current as {
+      reservation_code: string
+      lead_given_names: string
+      lead_email: string | null
+      status: string
+    }
+    if (['pending_payment', 'transfer_submitted', 'confirmed'].includes(row.status)) {
+      void sendBookingCancelled({
+        to: row.lead_email,
+        leadGivenNames: row.lead_given_names,
+        reservationCode: row.reservation_code,
+      })
+    }
   }
 
   revalidatePath('/admin')

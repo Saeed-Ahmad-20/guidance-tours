@@ -4,6 +4,7 @@ import DepositSubmittedEmail from '../../emails/deposit-submitted'
 import DepositConfirmedEmail from '../../emails/deposit-confirmed'
 import ExpiryWarningEmail from '../../emails/expiry-warning'
 import BookingExpiredEmail from '../../emails/booking-expired'
+import BookingCancelledEmail from '../../emails/booking-cancelled'
 import StatusRevertedEmail from '../../emails/status-reverted'
 
 let cached: Resend | null = null
@@ -171,6 +172,22 @@ export async function sendStatusReverted(args: {
       targetStatus: args.targetStatus,
       adminNote: args.adminNote,
       portalUrl: args.portalUrl,
+    }),
+  })
+}
+
+export async function sendBookingCancelled(args: {
+  to: string | null
+  leadGivenNames: string
+  reservationCode: string
+}): Promise<void> {
+  if (!args.to) return
+  await send({
+    to: args.to,
+    subject: `Your booking ${args.reservationCode} has been cancelled`,
+    react: BookingCancelledEmail({
+      leadGivenNames: args.leadGivenNames,
+      reservationCode: args.reservationCode,
     }),
   })
 }

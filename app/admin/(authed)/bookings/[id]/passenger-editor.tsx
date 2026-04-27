@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { adminUpdatePassenger } from '../../../../actions/admin'
 import {
+  cap,
   formatGBP,
   ROOM_PRICE_GBP,
   PASSPORT_VALIDITY_CUTOFF,
@@ -240,6 +241,3 @@ function PassengerEditForm({
   )
 }
 
-function cap(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}

@@ -20,6 +20,7 @@ import {
   RoomSelection,
   RoomType,
   buildBedLayout,
+  cap,
   formatGBP,
   passportNeedsRenewal,
   totalCostGBP,
@@ -1203,10 +1204,6 @@ function sharingDescription(capacity: number, selected: number): string {
     parts.push(`${partial === 1 ? '1 bed' : `${partial} beds`} shared with ${strangers} other${strangers === 1 ? '' : 's'}`)
   }
   return parts.join(' · ')
-}
-
-function cap(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 const inputClass =

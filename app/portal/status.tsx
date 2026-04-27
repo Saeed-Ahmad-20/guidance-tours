@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { markDepositSent, portalLogout, updateLeadContact } from '../actions/portal'
-import { BANK_DETAILS, formatGBP } from '../lib/booking'
+import { BANK_DETAILS, cap, formatGBP } from '../lib/booking'
 
 export type PortalReservation = {
   id: string
@@ -389,6 +389,3 @@ function ContactEditor({ email, phone }: { email: string; phone: string }) {
   )
 }
 
-function cap(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}

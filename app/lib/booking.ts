@@ -1,6 +1,9 @@
-import { randomBytes } from 'node:crypto'
-
 export const TOUR_SLUG = 'umrah-2026'
+
+export const BOOKING_TTL_HOURS = Number(process.env.BOOKING_TTL_HOURS ?? 30)
+export const BOOKING_DISPLAY_TTL_HOURS = Number(
+  process.env.BOOKING_DISPLAY_TTL_HOURS ?? 24
+)
 
 // Capacity describes the size of the physical room each bed lives in; it is
 // NOT a multiplier on booking counts — each unit booked = one bed = one person.
@@ -56,16 +59,13 @@ export function passportNeedsRenewal(expiryISO: string): boolean {
   return expiryISO < PASSPORT_VALIDITY_CUTOFF
 }
 
-const CODE_ALPHABET =
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+export function isValidEmail(s: string): boolean {
+  return EMAIL_RE.test(s) && s.length <= 254
+}
 
-export function generateReservationCode(): string {
-  const bytes = randomBytes(8)
-  let out = ''
-  for (let i = 0; i < 8; i++) {
-    out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length]
-  }
-  return out
+export function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 // One entry per bed booked. room_index is the zero-based position of that bed

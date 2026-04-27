@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabaseAdmin } from '../../../../lib/supabase-admin'
-import { BANK_DETAILS, formatGBP } from '../../../../lib/booking'
+import { BANK_DETAILS, BOOKING_DISPLAY_TTL_HOURS, formatGBP } from '../../../../lib/booking'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +38,7 @@ export default async function ConfirmationPage({
   const reservation = await getReservation(code)
   if (!reservation) notFound()
 
-  const displayHours = Number(process.env.BOOKING_DISPLAY_TTL_HOURS ?? 24)
+  const displayHours = BOOKING_DISPLAY_TTL_HOURS
 
   return (
     <div className="w-full bg-stone-50 min-h-[calc(100vh-4rem)]">

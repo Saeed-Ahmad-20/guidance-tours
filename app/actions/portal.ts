@@ -4,6 +4,8 @@ import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { supabaseAdmin } from '../lib/supabase-admin'
 import { sendDepositSubmitted } from '../lib/emails'
+import { checkRateLimit, clientIp, resetRateLimit } from '../lib/rate-limit'
+import { isValidEmail } from '../lib/booking'
 import {
   PORTAL_COOKIE,
   signPortalSession,
@@ -27,6 +29,11 @@ export async function portalLogin(formData: FormData): Promise<PortalLoginResult
   // Reservation code is 8 chars case-sensitive. Basic shape check avoids obvious abuse.
   if (rawCode.length !== 8 || !/^[A-Za-z0-9]{8}$/.test(rawCode)) {
     return { ok: false, error: 'Reservation number is not valid.' }
+  }
+
+  const ip = await clientIp()
+  if (!checkRateLimit('portalLogin', ip, 12, 15 * 60 * 1000)) {
+    return { ok: false, error: 'Too many attempts. Please try again later.' }
   }
 
   const db = supabaseAdmin()
@@ -54,6 +61,7 @@ export async function portalLogin(formData: FormData): Promise<PortalLoginResult
     return { ok: false, error: 'No booking matches those details.' }
   }
 
+  resetRateLimit('portalLogin', ip)
   const { value, maxAge } = signPortalSession(row.id)
   const store = await cookies()
   store.set(PORTAL_COOKIE, value, {
@@ -81,11 +89,16 @@ export async function updateLeadContact(email: string, phone: string): Promise<U
   const rid = verifyPortalSession(cookie)
   if (!rid) return { ok: false, error: 'Your session has expired. Please log in again.' }
 
+  const trimmedEmail = email.trim()
+  if (trimmedEmail && !isValidEmail(trimmedEmail)) {
+    return { ok: false, error: 'Please enter a valid email address.' }
+  }
+
   const db = supabaseAdmin()
   const { error } = await db
     .from('reservations')
     .update({
-      lead_email: email.trim() || null,
+      lead_email: trimmedEmail || null,
       lead_phone: phone.trim() || null,
     })
     .eq('id', rid)

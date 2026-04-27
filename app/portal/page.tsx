@@ -1,14 +1,14 @@
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '../lib/supabase-admin'
 import { PORTAL_COOKIE, verifyPortalSession } from '../lib/portal-session'
+import { BOOKING_DISPLAY_TTL_HOURS, BOOKING_TTL_HOURS } from '../lib/booking'
 import LoginForm from './login-form'
 import PortalStatus, { type PortalReservation } from './status'
 
 export const dynamic = 'force-dynamic'
 
-const REAL_TTL_HOURS = Number(process.env.BOOKING_TTL_HOURS ?? 30)
-const DISPLAY_TTL_HOURS = Number(process.env.BOOKING_DISPLAY_TTL_HOURS ?? 24)
-const BUFFER_MS = Math.max(0, REAL_TTL_HOURS - DISPLAY_TTL_HOURS) * 60 * 60 * 1000
+const BUFFER_MS =
+  Math.max(0, BOOKING_TTL_HOURS - BOOKING_DISPLAY_TTL_HOURS) * 60 * 60 * 1000
 
 async function loadReservation(rid: string): Promise<PortalReservation | null> {
   const db = supabaseAdmin()

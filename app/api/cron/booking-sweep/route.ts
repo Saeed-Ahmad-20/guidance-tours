@@ -1,9 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { supabaseAdmin } from '../../../lib/supabase-admin'
 import { sendBookingExpired, sendExpiryWarning } from '../../../lib/emails'
+import { BOOKING_DISPLAY_TTL_HOURS, BOOKING_TTL_HOURS } from '../../../lib/booking'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+
+// Pace email sends to stay under Resend's 2 req/s floor.
+const SEND_INTERVAL_MS = 1000
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 type WarnRow = {
   id: string
@@ -32,7 +37,13 @@ async function handle(request: NextRequest) {
 
   const db = supabaseAdmin()
   const now = new Date()
-  const oneHourAhead = new Date(now.getTime() + 60 * 60 * 1000).toISOString()
+  // Warn 1 hour before the *displayed* deadline. The buffer between real and
+  // displayed TTL means real expires_at is (BOOKING_TTL_HOURS - BOOKING_DISPLAY_TTL_HOURS)
+  // hours later than what the customer sees, so add that gap to the lead time.
+  const warnLeadHours = BOOKING_TTL_HOURS - BOOKING_DISPLAY_TTL_HOURS + 1
+  const warnThreshold = new Date(
+    now.getTime() + warnLeadHours * 60 * 60 * 1000
+  ).toISOString()
   let warned = 0
   let expiredNotified = 0
   let swept = 0
@@ -44,13 +55,16 @@ async function handle(request: NextRequest) {
     .eq('status', 'pending_payment')
     .is('warning_sent_at', null)
     .is('transfer_submitted_at', null)
-    .lte('expires_at', oneHourAhead)
+    .lte('expires_at', warnThreshold)
     .gte('expires_at', now.toISOString())
 
   if (warnErr) {
     console.error('[cron] warn query error:', warnErr.message)
   } else if (warnCandidates) {
-    for (const row of warnCandidates as WarnRow[]) {
+    const rows = warnCandidates as WarnRow[]
+    for (let i = 0; i < rows.length; i++) {
+      if (i > 0) await sleep(SEND_INTERVAL_MS)
+      const row = rows[i]
       await sendExpiryWarning({
         to: row.lead_email,
         leadGivenNames: row.lead_given_names,
@@ -81,7 +95,10 @@ async function handle(request: NextRequest) {
   if (expErr) {
     console.error('[cron] expired query error:', expErr.message)
   } else if (expiredCandidates) {
-    for (const row of expiredCandidates as ExpiredRow[]) {
+    const rows = expiredCandidates as ExpiredRow[]
+    for (let i = 0; i < rows.length; i++) {
+      if (i > 0) await sleep(SEND_INTERVAL_MS)
+      const row = rows[i]
       await sendBookingExpired({
         to: row.lead_email,
         leadGivenNames: row.lead_given_names,
