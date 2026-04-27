@@ -44,7 +44,7 @@ export default function ExpiryWarningEmail({
       title="One hour left"
     >
       <Text style={styles.paragraph}>
-        Assalamu alaikum {leadGivenNames},
+        Assalamu Alaykum {leadGivenNames},
       </Text>
       <Section style={warnBox}>
         <Text style={warnText}>

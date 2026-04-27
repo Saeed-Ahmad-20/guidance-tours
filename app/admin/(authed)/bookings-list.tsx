@@ -41,7 +41,7 @@ export type BookingRow = {
 }
 
 type Tab = 'awaiting' | 'pending' | 'confirmed' | 'expired' | 'cancelled' | 'all'
-type PanelType = 'confirm' | 'revert'
+type PanelType = 'confirm' | 'revert' | 'cancel'
 
 export default function BookingsList({
   bookings,
@@ -65,6 +65,7 @@ export default function BookingsList({
   const [panel, setPanel] = useState<{ id: string; type: PanelType; booking: BookingRow } | null>(null)
   const [amountStr, setAmountStr] = useState('')
   const [revertNote, setRevertNote] = useState('')
+  const [cancelNote, setCancelNote] = useState('')
 
   function toggleExpand(id: string) {
     setExpanded(prev => {
@@ -87,6 +88,7 @@ export default function BookingsList({
       setAmountStr('')
     }
     setRevertNote('')
+    setCancelNote('')
     setError(null)
   }
 
@@ -94,6 +96,7 @@ export default function BookingsList({
     setPanel(null)
     setAmountStr('')
     setRevertNote('')
+    setCancelNote('')
     setError(null)
   }
 
@@ -135,14 +138,14 @@ export default function BookingsList({
     })
   }
 
-  function onCancel(id: string) {
-    if (!confirm('Cancel this booking? This frees up the places and cannot be undone from here.')) return
-    setActionId(id)
+  function onCancelConfirmed() {
+    if (!panel) return
+    setActionId(panel.id)
     setError(null)
     startTransition(async () => {
-      const r = await cancelBooking(id)
+      const r = await cancelBooking(panel.id, cancelNote.trim() || undefined)
       setActionId(null)
-      if (r.ok) router.refresh()
+      if (r.ok) { closePanel(); router.refresh() }
       else setError(r.error)
     })
   }
@@ -309,7 +312,7 @@ export default function BookingsList({
                           )}
                           {canCancelB && (
                             <button
-                              onClick={() => onCancel(b.id)}
+                              onClick={() => isActionRow && panel?.type === 'cancel' ? closePanel() : openPanel('cancel', b)}
                               disabled={busy}
                               className="text-xs text-stone-500 hover:text-red-600 transition"
                             >
@@ -405,6 +408,42 @@ export default function BookingsList({
                                 className="text-xs text-stone-500 hover:text-stone-700 transition"
                               >
                                 Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
+                    {isActionRow && panel?.type === 'cancel' && (
+                      <tr className="bg-red-50/40 border-b border-stone-100">
+                        <td colSpan={8} className="px-4 py-3">
+                          <div className="flex flex-col gap-2.5 max-w-sm">
+                            <p className="text-xs font-semibold text-stone-700">
+                              Cancel booking — optional reason for customer
+                            </p>
+                            <textarea
+                              value={cancelNote}
+                              onChange={e => setCancelNote(e.target.value)}
+                              placeholder="e.g. Duplicate booking — your other reservation is confirmed."
+                              rows={2}
+                              maxLength={1000}
+                              className="w-full text-sm rounded-lg border border-stone-200 bg-white p-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-red-400"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={onCancelConfirmed}
+                                disabled={isPending}
+                                className="text-xs font-semibold bg-red-600 text-white rounded-full px-3 py-1.5 hover:bg-red-700 transition disabled:opacity-50"
+                              >
+                                {isPending ? 'Working…' : 'Cancel booking'}
+                              </button>
+                              <button
+                                onClick={closePanel}
+                                disabled={isPending}
+                                className="text-xs text-stone-500 hover:text-stone-700 transition"
+                              >
+                                Keep booking
                               </button>
                             </div>
                           </div>

@@ -47,7 +47,7 @@ export default function StatusRevertedEmail({
       title={isPending ? 'Action needed on your booking' : 'Your booking is back under review'}
     >
       <Text style={styles.paragraph}>
-        Assalamu alaikum {leadGivenNames},
+        Assalamu Alaykum {leadGivenNames},
       </Text>
       {isPending ? (
         <Text style={styles.paragraph}>

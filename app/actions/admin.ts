@@ -363,9 +363,17 @@ export async function adminUpdatePassenger(
   return { ok: true }
 }
 
-export async function cancelBooking(reservationId: string): Promise<AdminActionResult> {
+export async function cancelBooking(
+  reservationId: string,
+  adminNote?: string
+): Promise<AdminActionResult> {
   const admin = await requireAdmin().catch(() => null)
   if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const trimmedNote = adminNote?.trim()
+  if (trimmedNote && trimmedNote.length > 1000) {
+    return { ok: false, error: 'Cancellation note must be 1000 characters or fewer.' }
+  }
 
   const db = supabaseAdmin()
   const { data: current, error: fetchErr } = await db
@@ -385,6 +393,7 @@ export async function cancelBooking(reservationId: string): Promise<AdminActionR
     .update({
       status: 'cancelled',
       cancelled_at: new Date().toISOString(),
+      admin_note: trimmedNote || null,
     })
     .eq('id', reservationId)
     .in('status', ['pending_payment', 'transfer_submitted', 'confirmed'])
@@ -406,6 +415,7 @@ export async function cancelBooking(reservationId: string): Promise<AdminActionR
         to: row.lead_email,
         leadGivenNames: row.lead_given_names,
         reservationCode: row.reservation_code,
+        adminNote: trimmedNote || undefined,
       })
     }
   }

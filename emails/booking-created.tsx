@@ -66,7 +66,7 @@ export default function BookingCreatedEmail({
       title="Your place is held"
     >
       <Text style={styles.paragraph}>
-        Assalamu alaikum {leadGivenNames},
+        Assalamu Alaykum {leadGivenNames},
       </Text>
       <Text style={styles.paragraph}>
         Thanks for booking with Guidance Tours. We&apos;ve held{' '}

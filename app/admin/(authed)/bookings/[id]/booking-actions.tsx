@@ -6,7 +6,7 @@ import { cancelBooking, confirmDeposit, revertToPending } from '../../../../acti
 import { formatGBP } from '../../../../lib/booking'
 
 type Status = 'pending_payment' | 'transfer_submitted' | 'confirmed' | 'expired' | 'cancelled'
-type Panel = 'confirm' | 'revert' | null
+type Panel = 'confirm' | 'revert' | 'cancel' | null
 
 export default function BookingActions({
   id,
@@ -46,11 +46,10 @@ export default function BookingActions({
   }
 
   function onCancel() {
-    if (!confirm('Cancel this booking? This frees up the places.')) return
     setError(null)
     startTransition(async () => {
-      const r = await cancelBooking(id)
-      if (r.ok) router.refresh()
+      const r = await cancelBooking(id, note.trim() || undefined)
+      if (r.ok) { setPanel(null); setNote(''); router.refresh() }
       else setError(r.error)
     })
   }
@@ -112,7 +111,7 @@ export default function BookingActions({
         )}
         {canCancel && (
           <button
-            onClick={onCancel}
+            onClick={() => openPanel(panel === 'cancel' ? null : 'cancel')}
             disabled={isPending}
             className="inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-white border border-stone-300 text-stone-700 font-semibold text-sm hover:border-red-400 hover:text-red-600 transition disabled:opacity-50"
           >
@@ -216,6 +215,49 @@ export default function BookingActions({
               className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-white border border-stone-300 text-stone-600 font-semibold text-sm hover:border-stone-400 transition disabled:opacity-50"
             >
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {panel === 'cancel' && (
+        <div className="rounded-xl border border-red-200 bg-red-50/40 p-4 flex flex-col gap-3">
+          <div>
+            <p className="text-sm font-semibold text-stone-900">Cancel this booking</p>
+            <p className="text-xs text-stone-500 mt-0.5">
+              The places will be released and the customer will be emailed. This cannot be undone from here.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-stone-600 uppercase tracking-wider">
+              Reason for customer{' '}
+              <span className="font-normal normal-case tracking-normal text-stone-400">
+                (optional — included in cancellation email)
+              </span>
+            </label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="e.g. Duplicate booking — your other reservation is confirmed."
+              rows={3}
+              maxLength={1000}
+              className="w-full text-sm rounded-lg border border-stone-200 bg-white p-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-red-400"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onCancel}
+              disabled={isPending}
+              className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition disabled:opacity-50"
+            >
+              {isPending ? 'Working…' : 'Cancel booking'}
+            </button>
+            <button
+              onClick={() => setPanel(null)}
+              disabled={isPending}
+              className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-white border border-stone-300 text-stone-600 font-semibold text-sm hover:border-stone-400 transition disabled:opacity-50"
+            >
+              Keep booking
             </button>
           </div>
         </div>

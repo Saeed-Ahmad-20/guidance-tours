@@ -180,6 +180,7 @@ export async function sendBookingCancelled(args: {
   to: string | null
   leadGivenNames: string
   reservationCode: string
+  adminNote?: string
 }): Promise<void> {
   if (!args.to) return
   await send({
@@ -188,6 +189,7 @@ export async function sendBookingCancelled(args: {
     react: BookingCancelledEmail({
       leadGivenNames: args.leadGivenNames,
       reservationCode: args.reservationCode,
+      adminNote: args.adminNote,
     }),
   })
 }

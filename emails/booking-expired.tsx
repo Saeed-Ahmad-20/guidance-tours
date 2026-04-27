@@ -28,7 +28,7 @@ export default function BookingExpiredEmail({
       title="Your booking has been released"
     >
       <Text style={styles.paragraph}>
-        Assalamu alaikum {leadGivenNames},
+        Assalamu Alaykum {leadGivenNames},
       </Text>
       <Text style={styles.paragraph}>
         The deposit window for reservation <strong>{reservationCode}</strong> has passed,

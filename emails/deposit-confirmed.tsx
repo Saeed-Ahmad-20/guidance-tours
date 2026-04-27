@@ -51,7 +51,7 @@ export default function DepositConfirmedEmail({
       title={isPartial ? 'Partial deposit received' : 'Your place is confirmed'}
     >
       <Text style={styles.paragraph}>
-        Assalamu alaikum {leadGivenNames},
+        Assalamu Alaykum {leadGivenNames},
       </Text>
       {isPartial ? (
         <>
