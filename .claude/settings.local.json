@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npx next *)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"console.log\\('PORTAL_SESSION_SECRET=' + require\\('crypto'\\).randomBytes\\(32\\).toString\\('hex'\\)\\)\")",
+      "Bash(node -e \"const c=require\\('crypto'\\);const a='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!-_';let p='';while\\(p.length<24\\){const b=c.randomBytes\\(1\\)[0];if\\(b<a.length*Math.floor\\(256/a.length\\)\\)p+=a[b%a.length]}console.log\\(p\\)\")",
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(xargs grep *)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx|js\\)$\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npx eslint *)"
     ]
   }
 }

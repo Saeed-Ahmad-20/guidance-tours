@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import Link from 'next/link'
 import { motion, useInView } from 'framer-motion'
 import { useRef, useEffect, useState } from 'react'
 
@@ -16,18 +17,18 @@ const features = [
 ]
 
 const pricing = [
-  { type: 'Quad', price: 1695, badge: 'Best Value' },
-  { type: 'Triple', price: 1795, badge: null },
-  { type: 'Double', price: 1895, badge: 'Premium' },
+  { type: 'Quad', price: 1745, badge: 'Best Value' },
+  { type: 'Triple', price: 1845, badge: null },
+  { type: 'Double', price: 1945, badge: 'Premium' },
 ]
 
 const hotels = [
   {
     city: 'Makkah',
-    hotel: 'Hilton Double Tree',
-    stars: 4,
+    hotel: 'Hilton Convention Jabal Omar',
+    stars: 5,
     icon: '🕋',
-    url: 'https://www.hilton.com/en/hotels/makdmdi-doubletree-jabal-omar-makkah/',
+    url: 'https://www.hilton.com/en/hotels/makchhi-hilton-hotel-and-convention-jabal-omar-makkah/',
   },
   {
     city: 'Madinah',
@@ -365,8 +366,8 @@ export default function Umrah2026Page() {
               <div className="w-full h-px bg-gradient-to-r from-transparent via-[#C4A348]/20 to-transparent mb-3" />
 
               <div className="text-center">
-                <p className="text-xs text-white font-medium">Jummah in Madinah</p>
-                <p className="text-[10px] text-stone-400 mt-0.5">Madinah First · Return from Makkah</p>
+                <p className="text-sm font-semibold text-[#C4A348]">Jummah in Madinah</p>
+                <p className="text-[11px] text-stone-300 mt-1 leading-snug">Madinah First · Return from Makkah</p>
               </div>
             </div>
 
@@ -386,10 +387,10 @@ export default function Umrah2026Page() {
                 <div className="w-px h-4 bg-[#C4A348]/40" />
               </div>
 
-              <div className="text-center space-y-1.5 max-w-[160px]">
-                <p className="text-sm text-white font-medium">Jummah in Madinah</p>
-                <div className="w-6 h-px bg-[#C4A348]/40 mx-auto" />
-                <p className="text-xs text-stone-400">Madinah First · Return from Makkah</p>
+              <div className="text-center space-y-2 max-w-[220px]">
+                <p className="text-2xl md:text-4xl lg:text-2xl font-bold text-[#C4A348] leading-tight whitespace-nowrap">Jummah in Madinah</p>
+                <div className="w-10 h-px bg-[#C4A348]/40 mx-auto" />
+                <p className="text-l text-stone-300 leading-snug">Madinah First · Return from Makkah</p>
               </div>
 
               <div className="flex flex-col items-center gap-1">
@@ -409,11 +410,32 @@ export default function Umrah2026Page() {
           </motion.div>
 
           <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 1.0 }}
+            className="mt-8 sm:mt-12 flex justify-center"
+          >
+            <Link
+              href="/umrah-2026/book"
+              className="group relative inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-[#C4A348] to-[#E8D48B] text-[#2C1F0E] font-bold text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-lg shadow-[#C4A348]/20 hover:shadow-xl hover:shadow-[#C4A348]/30 hover:-translate-y-0.5 transition-all duration-300"
+            >
+              <span>Reserve Your Place</span>
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 group-hover:translate-x-1"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17.25 8.25L21 12m0 0l-3.75 3.75M21 12H3" />
+              </svg>
+            </Link>
+          </motion.div>
+
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1.5 }}
-            className="mt-10 sm:mt-16"
-            /* FIXED: Reduced margin on mobile */
+            className="mt-8 sm:mt-12"
           >
             <motion.div
               animate={{ y: [0, 8, 0] }}
@@ -499,6 +521,7 @@ export default function Umrah2026Page() {
                       {/* FIXED: Responsive font sizing */}
                       {item.hotel}
                     </p>
+                    <p className="text-[10px] sm:text-xs text-stone-400 -mt-1 mb-2 sm:mb-3">or similar</p>
                     <div className="flex items-center justify-center gap-1 mb-3 sm:mb-4">
                       {Array.from({ length: item.stars }).map((_, j) => (
                         <ScaleIn key={j} delay={0.3 + j * 0.08}>
@@ -556,7 +579,8 @@ export default function Umrah2026Page() {
                     {/* FIXED: Responsive sizing */}
                     {type}
                   </p>
-                  <div className="mb-2">
+                  <div className="mb-1">
+                    <p className="text-[10px] sm:text-xs text-stone-400 mb-1">from</p>
                     <span className="text-3xl sm:text-4xl md:text-5xl font-bold text-stone-900">
                       {/* FIXED: Smaller on mobile */}
                       <AnimatedCounter target={price} suffix="£" />
@@ -569,6 +593,10 @@ export default function Umrah2026Page() {
               </FadeInWhenVisible>
             ))}
           </div>
+
+          <p className="text-center text-[10px] sm:text-xs text-stone-400 -mt-2 sm:-mt-4 mb-6 sm:mb-8 px-2">
+            Prices shown are subject to increase — book early to secure the current rate.
+          </p>
 
           <FadeInWhenVisible delay={0.3}>
             <motion.div
@@ -599,6 +627,20 @@ export default function Umrah2026Page() {
                   {/* FIXED: Smaller text, added px for breathing room */}
                   Deposit is non-refundable · Balance due 8 weeks before departure
                 </p>
+                <Link
+                  href="/umrah-2026/book"
+                  className="group mt-5 sm:mt-6 inline-flex items-center gap-2 bg-gradient-to-r from-[#C4A348] to-[#E8D48B] text-[#2C1F0E] font-bold text-sm sm:text-base px-6 sm:px-8 py-3 rounded-full shadow-lg shadow-[#C4A348]/20 hover:shadow-xl hover:shadow-[#C4A348]/30 hover:-translate-y-0.5 transition-all duration-300"
+                >
+                  <span>Book Now</span>
+                  <svg
+                    className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17.25 8.25L21 12m0 0l-3.75 3.75M21 12H3" />
+                  </svg>
+                </Link>
               </div>
             </motion.div>
           </FadeInWhenVisible>
