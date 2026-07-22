@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 
 function b64url(buf: Buffer | string): string {
   return Buffer.from(buf)
@@ -46,4 +46,13 @@ export function verifyToken<P extends { exp: number }>(
   } catch {
     return null
   }
+}
+
+// Bind a session token to a coarse client fingerprint so a stolen cookie
+// replayed from a different browser is rejected. We hash User-Agent only
+// (Accept-Language is too unstable across navigations); IP would invalidate
+// sessions on every mobile-network handover.
+export function fingerprintFromHeaders(h: Headers): string {
+  const ua = h.get('user-agent') ?? ''
+  return createHash('sha256').update(ua).digest('base64url').slice(0, 16)
 }

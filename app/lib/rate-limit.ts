@@ -1,14 +1,14 @@
 import { headers } from 'next/headers'
+import { supabaseAdmin } from './supabase-admin'
 
-// Best-effort in-memory rate limiter. Module-level Map is per-instance, so on
-// serverless this only catches the lazy/casual case — a determined attacker
-// can hop between warm instances. Replace with Supabase- or Redis-backed
-// counters once we have a persistent store wired up.
+// Rate limits are persisted in Supabase (`rate_limits` table) so they hold
+// across Fluid Compute instances and serverless cold starts. The in-memory
+// Map below is a *fallback only* — used if the DB call errors so that the
+// site does not hard-fail when Supabase is briefly unreachable. A determined
+// attacker bypassing the persistent layer would have to take Supabase down
+// first, at which point booking writes are also blocked.
 type Bucket = { count: number; firstAt: number }
-const buckets = new Map<string, Map<string, Bucket>>()
-
-// Hard cap per scope to bound memory on long-lived Fluid Compute instances.
-// When exceeded, we evict expired entries first, then the oldest by firstAt.
+const localFallback = new Map<string, Map<string, Bucket>>()
 const MAX_KEYS_PER_SCOPE = 5000
 
 export async function clientIp(): Promise<string> {
@@ -20,7 +20,7 @@ export async function clientIp(): Promise<string> {
   )
 }
 
-function evict(scoped: Map<string, Bucket>, windowMs: number, now: number) {
+function evictLocal(scoped: Map<string, Bucket>, windowMs: number, now: number) {
   for (const [k, v] of scoped) {
     if (now - v.firstAt > windowMs) scoped.delete(k)
   }
@@ -30,21 +30,16 @@ function evict(scoped: Map<string, Bucket>, windowMs: number, now: number) {
   for (let i = 0; i < toRemove; i++) scoped.delete(sorted[i][0])
 }
 
-export function checkRateLimit(
-  scope: string,
-  key: string,
-  max: number,
-  windowMs: number
-): boolean {
+function checkLocal(scope: string, key: string, max: number, windowMs: number): boolean {
   const now = Date.now()
-  let scoped = buckets.get(scope)
+  let scoped = localFallback.get(scope)
   if (!scoped) {
     scoped = new Map()
-    buckets.set(scope, scoped)
+    localFallback.set(scope, scoped)
   }
   const entry = scoped.get(key)
   if (!entry || now - entry.firstAt > windowMs) {
-    if (scoped.size >= MAX_KEYS_PER_SCOPE) evict(scoped, windowMs, now)
+    if (scoped.size >= MAX_KEYS_PER_SCOPE) evictLocal(scoped, windowMs, now)
     scoped.set(key, { count: 1, firstAt: now })
     return true
   }
@@ -52,6 +47,39 @@ export function checkRateLimit(
   return entry.count <= max
 }
 
-export function resetRateLimit(scope: string, key: string): void {
-  buckets.get(scope)?.delete(key)
+export async function checkRateLimit(
+  scope: string,
+  key: string,
+  max: number,
+  windowMs: number
+): Promise<boolean> {
+  try {
+    const db = supabaseAdmin()
+    const windowSeconds = Math.ceil(windowMs / 1000)
+    const { data, error } = await db.rpc('check_rate_limit', {
+      p_scope: scope,
+      p_key: key,
+      p_max: max,
+      p_window_seconds: windowSeconds,
+    })
+    if (error) {
+      console.error('[rate-limit] db error, falling back to local:', error.message)
+      return checkLocal(scope, key, max, windowMs)
+    }
+    // RPC returns true if request is allowed, false if over limit.
+    return Boolean(data)
+  } catch (e) {
+    console.error('[rate-limit] unexpected error, falling back to local:', e)
+    return checkLocal(scope, key, max, windowMs)
+  }
+}
+
+export async function resetRateLimit(scope: string, key: string): Promise<void> {
+  try {
+    const db = supabaseAdmin()
+    await db.rpc('reset_rate_limit', { p_scope: scope, p_key: key })
+  } catch (e) {
+    console.error('[rate-limit] reset failed:', e)
+  }
+  localFallback.get(scope)?.delete(key)
 }

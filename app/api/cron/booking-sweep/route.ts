@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { timingSafeEqual } from 'node:crypto'
 import { supabaseAdmin } from '../../../lib/supabase-admin'
 import { sendBookingExpired, sendExpiryWarning } from '../../../lib/emails'
 import { BOOKING_DISPLAY_TTL_HOURS, BOOKING_TTL_HOURS } from '../../../lib/booking'
+import { getCronSecret } from '../../../lib/env'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,13 +27,34 @@ type ExpiredRow = {
   lead_email: string | null
 }
 
+function safeBearerMatch(header: string | null, expected: string): boolean {
+  if (!header) return false
+  const prefix = 'Bearer '
+  if (!header.startsWith(prefix)) return false
+  const provided = header.slice(prefix.length)
+  if (provided.length !== expected.length) return false
+  return timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
+}
+
 async function handle(request: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (!secret) {
+  let secret: string
+  try {
+    secret = getCronSecret()
+  } catch (e) {
+    console.error('[cron] secret misconfigured:', e)
     return NextResponse.json({ ok: false, error: 'CRON_SECRET not configured' }, { status: 500 })
   }
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${secret}`) {
+
+  // Vercel sets x-vercel-cron on platform-triggered cron invocations. In
+  // production we require it so a leaked CRON_SECRET cannot be replayed from
+  // an arbitrary client. Outside production we accept Bearer-only so local
+  // and staging tests still work.
+  const isVercelProd = process.env.VERCEL_ENV === 'production'
+  if (isVercelProd && request.headers.get('x-vercel-cron') !== '1') {
+    return NextResponse.json({ ok: false, error: 'Unauthorised' }, { status: 401 })
+  }
+
+  if (!safeBearerMatch(request.headers.get('authorization'), secret)) {
     return NextResponse.json({ ok: false, error: 'Unauthorised' }, { status: 401 })
   }
 

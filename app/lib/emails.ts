@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { render } from '@react-email/render'
 import BookingCreatedEmail from '../../emails/booking-created'
 import DepositSubmittedEmail from '../../emails/deposit-submitted'
 import DepositConfirmedEmail from '../../emails/deposit-confirmed'
@@ -6,6 +7,7 @@ import ExpiryWarningEmail from '../../emails/expiry-warning'
 import BookingExpiredEmail from '../../emails/booking-expired'
 import BookingCancelledEmail from '../../emails/booking-cancelled'
 import StatusRevertedEmail from '../../emails/status-reverted'
+import AdminMessageEmail from '../../emails/admin-message'
 
 let cached: Resend | null = null
 
@@ -37,20 +39,27 @@ function adminEmail(): string | null {
 }
 
 async function send(args: {
-  to: string
+  to: string | null
   subject: string
   react: React.ReactElement
 }): Promise<void> {
+  if (!args.to) {
+    console.warn('[emails] skipped — no recipient address. subject:', args.subject)
+    return
+  }
   const resend = client()
   if (!resend) return
+  console.log('[emails] sending to:', args.to, '| subject:', args.subject)
   try {
+    const html = await render(args.react)
     const { error } = await resend.emails.send({
       from: from(),
       to: args.to,
       subject: args.subject,
-      react: args.react,
+      html,
     })
     if (error) console.error('[emails] send error:', error.message)
+    else console.log('[emails] sent ok to:', args.to)
   } catch (err) {
     console.error('[emails] unexpected:', err)
   }
@@ -63,7 +72,6 @@ export async function sendBookingCreated(args: {
   depositAmountGBP: number
   totalPeople: number
 }): Promise<void> {
-  if (!args.to) return
   const portalUrl = `${siteUrl()}/portal?code=${encodeURIComponent(args.reservationCode)}`
   await send({
     to: args.to,
@@ -88,7 +96,10 @@ export async function sendDepositSubmitted(args: {
   depositAmountGBP: number
 }): Promise<void> {
   const to = adminEmail()
-  if (!to) return
+  if (!to) {
+    console.warn('[emails] skipped sendDepositSubmitted — ADMIN_NOTIFICATION_EMAIL not set')
+    return
+  }
   const adminBookingUrl = `${adminSiteUrl()}/bookings/${args.reservationId}`
   await send({
     to,
@@ -113,7 +124,6 @@ export async function sendDepositConfirmed(args: {
   depositAmountGBP: number
   amountReceivedGBP?: number
 }): Promise<void> {
-  if (!args.to) return
   const isPartial = args.amountReceivedGBP !== undefined && args.amountReceivedGBP < args.depositAmountGBP
   await send({
     to: args.to,
@@ -136,7 +146,6 @@ export async function sendExpiryWarning(args: {
   reservationCode: string
   depositAmountGBP: number
 }): Promise<void> {
-  if (!args.to) return
   const portalUrl = `${siteUrl()}/portal?code=${encodeURIComponent(args.reservationCode)}`
   await send({
     to: args.to,
@@ -158,7 +167,6 @@ export async function sendStatusReverted(args: {
   adminNote?: string
   portalUrl: string
 }): Promise<void> {
-  if (!args.to) return
   const subject =
     args.targetStatus === 'pending_payment'
       ? `Action needed on your booking ${args.reservationCode}`
@@ -182,7 +190,6 @@ export async function sendBookingCancelled(args: {
   reservationCode: string
   adminNote?: string
 }): Promise<void> {
-  if (!args.to) return
   await send({
     to: args.to,
     subject: `Your booking ${args.reservationCode} has been cancelled`,
@@ -194,12 +201,30 @@ export async function sendBookingCancelled(args: {
   })
 }
 
+export async function sendAdminMessage(args: {
+  to: string | null
+  leadGivenNames: string
+  reservationCode: string
+  message: string
+}): Promise<void> {
+  const portalUrl = `${siteUrl()}/portal?code=${encodeURIComponent(args.reservationCode)}`
+  await send({
+    to: args.to,
+    subject: `Update on your booking ${args.reservationCode}`,
+    react: AdminMessageEmail({
+      leadGivenNames: args.leadGivenNames,
+      reservationCode: args.reservationCode,
+      message: args.message,
+      portalUrl,
+    }),
+  })
+}
+
 export async function sendBookingExpired(args: {
   to: string | null
   leadGivenNames: string
   reservationCode: string
 }): Promise<void> {
-  if (!args.to) return
   const bookUrl = `${siteUrl()}/umrah-2026/book`
   await send({
     to: args.to,

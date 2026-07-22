@@ -2,9 +2,10 @@
 
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { timingSafeEqual } from 'node:crypto'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { supabaseAdmin } from '../lib/supabase-admin'
 import {
+  sendAdminMessage,
   sendBookingCancelled,
   sendDepositConfirmed,
   sendStatusReverted,
@@ -17,50 +18,64 @@ import {
 import {
   BOOKING_TTL_HOURS,
   ROOM_PRICE_GBP,
+  isValidDateOfBirth,
   isValidEmail,
   passportNeedsRenewal,
 } from '../lib/booking'
 import { checkRateLimit, clientIp, resetRateLimit } from '../lib/rate-limit'
+import { assertSameOrigin } from '../lib/csrf'
+import { getAdminCredentials } from '../lib/env'
 
 const isProd = process.env.NODE_ENV === 'production'
 
+// Compare via SHA-256 digests so the buffers are always 32 bytes — this
+// removes the length-leak from a raw timingSafeEqual call (different-length
+// inputs returned in O(1), exposing whether the username/password length
+// matched before any byte comparison ran).
 function safeEqualStr(a: string, b: string): boolean {
-  const ab = Buffer.from(a)
-  const bb = Buffer.from(b)
-  if (ab.length !== bb.length) return false
-  return timingSafeEqual(ab, bb)
+  const ah = createHash('sha256').update(a).digest()
+  const bh = createHash('sha256').update(b).digest()
+  return timingSafeEqual(ah, bh)
 }
 
 export type AdminLoginResult = { ok: true } | { ok: false; error: string }
 
 export async function adminLogin(formData: FormData): Promise<AdminLoginResult> {
+  await assertSameOrigin()
+
   const username = ((formData.get('username') as string | null) ?? '').trim()
   const password = (formData.get('password') as string | null) ?? ''
 
   const ip = await clientIp()
-  if (!checkRateLimit('adminLogin', ip, 8, 15 * 60 * 1000)) {
+  if (!(await checkRateLimit('adminLogin', ip, 8, 15 * 60 * 1000))) {
     return { ok: false, error: 'Too many attempts. Please try again later.' }
   }
 
-  const expectedUser = process.env.ADMIN_USERNAME
-  const expectedPass = process.env.ADMIN_PASSWORD
-  if (!expectedUser || !expectedPass) {
+  let expectedUser: string
+  let expectedPass: string
+  try {
+    const creds = getAdminCredentials()
+    expectedUser = creds.username
+    expectedPass = creds.password
+  } catch {
     return { ok: false, error: 'Admin credentials are not configured.' }
   }
 
+  // Always run both compares so attackers cannot tell from response timing
+  // whether the username or the password was the failing field.
   const userOk = safeEqualStr(username, expectedUser)
   const passOk = safeEqualStr(password, expectedPass)
   if (!userOk || !passOk) {
     return { ok: false, error: 'Invalid username or password.' }
   }
 
-  resetRateLimit('adminLogin', ip)
-  const { value, maxAge } = signAdminSession(username)
+  await resetRateLimit('adminLogin', ip)
+  const { value, maxAge } = await signAdminSession(username)
   const store = await cookies()
   store.set(ADMIN_COOKIE, value, {
     httpOnly: true,
     secure: isProd,
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge,
   })
@@ -68,6 +83,7 @@ export async function adminLogin(formData: FormData): Promise<AdminLoginResult> 
 }
 
 export async function adminLogout() {
+  await assertSameOrigin()
   const store = await cookies()
   store.delete(ADMIN_COOKIE)
   revalidatePath('/admin')
@@ -87,6 +103,7 @@ export async function confirmDeposit(
   reservationId: string,
   amountReceived?: number
 ): Promise<AdminActionResult> {
+  await assertSameOrigin()
   const admin = await requireAdmin().catch(() => null)
   if (!admin) return { ok: false, error: 'Not authorised.' }
 
@@ -137,7 +154,7 @@ export async function confirmDeposit(
     return { ok: false, error: 'Could not update booking.' }
   }
 
-  void sendDepositConfirmed({
+  await sendDepositConfirmed({
     to: row.lead_email,
     leadGivenNames: row.lead_given_names,
     reservationCode: row.reservation_code,
@@ -155,6 +172,7 @@ export async function revertToPending(
   reservationId: string,
   adminNote?: string
 ): Promise<AdminActionResult> {
+  await assertSameOrigin()
   const admin = await requireAdmin().catch(() => null)
   if (!admin) return { ok: false, error: 'Not authorised.' }
 
@@ -198,7 +216,7 @@ export async function revertToPending(
   }
 
   const portalUrl = `${process.env.SITE_URL || 'https://www.guidancetours.co.uk'}/portal?code=${encodeURIComponent(row.reservation_code)}`
-  void sendStatusReverted({
+  await sendStatusReverted({
     to: row.lead_email,
     leadGivenNames: row.lead_given_names,
     reservationCode: row.reservation_code,
@@ -217,6 +235,7 @@ export async function adminUpdateLeadContact(
   email: string,
   phone: string
 ): Promise<AdminActionResult> {
+  await assertSameOrigin()
   const admin = await requireAdmin().catch(() => null)
   if (!admin) return { ok: false, error: 'Not authorised.' }
 
@@ -258,6 +277,7 @@ export async function adminUpdatePassenger(
   reservationId: string,
   data: PassengerUpdateInput
 ): Promise<AdminActionResult> {
+  await assertSameOrigin()
   const admin = await requireAdmin().catch(() => null)
   if (!admin) return { ok: false, error: 'Not authorised.' }
 
@@ -287,8 +307,8 @@ export async function adminUpdatePassenger(
     return { ok: false, error: 'Invalid room type.' }
   }
   const today = new Date().toISOString().slice(0, 10)
-  if (!data.date_of_birth || data.date_of_birth < '1900-01-01' || data.date_of_birth >= today) {
-    return { ok: false, error: 'Date of birth must be between 1 Jan 1900 and today.' }
+  if (!isValidDateOfBirth(data.date_of_birth, today)) {
+    return { ok: false, error: 'Enter a realistic date of birth (under 120 years old).' }
   }
   if (!data.passport_expiry || data.passport_expiry < today) {
     return { ok: false, error: 'Passport expiry must be today or later.' }
@@ -367,6 +387,7 @@ export async function cancelBooking(
   reservationId: string,
   adminNote?: string
 ): Promise<AdminActionResult> {
+  await assertSameOrigin()
   const admin = await requireAdmin().catch(() => null)
   if (!admin) return { ok: false, error: 'Not authorised.' }
 
@@ -411,7 +432,7 @@ export async function cancelBooking(
       status: string
     }
     if (['pending_payment', 'transfer_submitted', 'confirmed'].includes(row.status)) {
-      void sendBookingCancelled({
+      await sendBookingCancelled({
         to: row.lead_email,
         leadGivenNames: row.lead_given_names,
         reservationCode: row.reservation_code,
@@ -425,7 +446,60 @@ export async function cancelBooking(
   return { ok: true }
 }
 
+export async function messageCustomer(
+  reservationId: string,
+  message: string
+): Promise<AdminActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const trimmed = message.trim()
+  if (!trimmed) return { ok: false, error: 'Message cannot be empty.' }
+  if (trimmed.length > 2000) return { ok: false, error: 'Message must be 2000 characters or fewer.' }
+
+  const db = supabaseAdmin()
+  const { data: current, error: readErr } = await db
+    .from('reservations')
+    .select('status, reservation_code, lead_given_names, lead_email')
+    .eq('id', reservationId)
+    .maybeSingle()
+  if (readErr || !current) return { ok: false, error: 'Booking not found.' }
+
+  const row = current as {
+    status: string
+    reservation_code: string
+    lead_given_names: string
+    lead_email: string | null
+  }
+  if (row.status === 'expired' || row.status === 'cancelled') {
+    return { ok: false, error: `Cannot message customer on a ${row.status} booking.` }
+  }
+
+  const { error } = await db
+    .from('reservations')
+    .update({ admin_note: trimmed })
+    .eq('id', reservationId)
+
+  if (error) {
+    console.error('messageCustomer error:', error.message)
+    return { ok: false, error: 'Could not save message.' }
+  }
+
+  await sendAdminMessage({
+    to: row.lead_email,
+    leadGivenNames: row.lead_given_names,
+    reservationCode: row.reservation_code,
+    message: trimmed,
+  })
+
+  revalidatePath('/admin')
+  revalidatePath(`/admin/bookings/${reservationId}`)
+  return { ok: true }
+}
+
 export async function removeWaitingListEntry(id: string): Promise<AdminActionResult> {
+  await assertSameOrigin()
   const admin = await requireAdmin().catch(() => null)
   if (!admin) return { ok: false, error: 'Not authorised.' }
 

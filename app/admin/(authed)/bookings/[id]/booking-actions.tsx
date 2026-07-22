@@ -2,11 +2,11 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { cancelBooking, confirmDeposit, revertToPending } from '../../../../actions/admin'
+import { cancelBooking, confirmDeposit, messageCustomer, revertToPending } from '../../../../actions/admin'
 import { formatGBP } from '../../../../lib/booking'
 
 type Status = 'pending_payment' | 'transfer_submitted' | 'confirmed' | 'expired' | 'cancelled'
-type Panel = 'confirm' | 'revert' | 'cancel' | null
+type Panel = 'confirm' | 'revert' | 'cancel' | 'message' | null
 
 export default function BookingActions({
   id,
@@ -29,6 +29,7 @@ export default function BookingActions({
   const canConfirm = status === 'pending_payment' || status === 'transfer_submitted'
   const canRevert = status === 'transfer_submitted' || status === 'confirmed'
   const canCancel = status !== 'expired' && status !== 'cancelled'
+  const canMessage = status !== 'expired' && status !== 'cancelled'
 
   function openPanel(p: Panel) {
     setPanel(p)
@@ -78,6 +79,16 @@ export default function BookingActions({
     })
   }
 
+  function onMessage() {
+    if (!note.trim()) { setError('Message cannot be empty.'); return }
+    setError(null)
+    startTransition(async () => {
+      const r = await messageCustomer(id, note.trim())
+      if (r.ok) { setPanel(null); setNote(''); router.refresh() }
+      else setError(r.error)
+    })
+  }
+
   const received = parseFloat(amountStr)
   const totalReceived = (depositReceivedGBP ?? 0) + (isNaN(received) ? 0 : received)
   const isPartial = !isNaN(received) && received > 0 && totalReceived < depositAmountGBP
@@ -107,6 +118,15 @@ export default function BookingActions({
             className="inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 font-semibold text-sm hover:bg-amber-200 transition disabled:opacity-50"
           >
             Revert to pending
+          </button>
+        )}
+        {canMessage && (
+          <button
+            onClick={() => openPanel(panel === 'message' ? null : 'message')}
+            disabled={isPending}
+            className="inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-white border border-stone-300 text-stone-700 font-semibold text-sm hover:border-stone-400 transition disabled:opacity-50"
+          >
+            Message customer
           </button>
         )}
         {canCancel && (
@@ -211,6 +231,47 @@ export default function BookingActions({
             </button>
             <button
               onClick={() => setPanel(null)}
+              disabled={isPending}
+              className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-white border border-stone-300 text-stone-600 font-semibold text-sm hover:border-stone-400 transition disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {panel === 'message' && (
+        <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 flex flex-col gap-3">
+          <div>
+            <p className="text-sm font-semibold text-stone-900">Message customer</p>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Sends an email to the customer and shows the message in their portal. Their booking status will not change.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-stone-600 uppercase tracking-wider">
+              Message
+            </label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="e.g. We've received your payment — your place is confirmed. We'll be in touch with further details."
+              rows={4}
+              maxLength={2000}
+              className="w-full text-sm rounded-lg border border-stone-200 bg-white p-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-stone-400"
+            />
+            <p className="text-xs text-stone-400 text-right">{note.length}/2000</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onMessage}
+              disabled={isPending}
+              className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-stone-800 hover:bg-stone-900 text-white font-semibold text-sm transition disabled:opacity-50"
+            >
+              {isPending ? 'Sending…' : 'Send message'}
+            </button>
+            <button
+              onClick={() => { setPanel(null); setNote('') }}
               disabled={isPending}
               className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-white border border-stone-300 text-stone-600 font-semibold text-sm hover:border-stone-400 transition disabled:opacity-50"
             >

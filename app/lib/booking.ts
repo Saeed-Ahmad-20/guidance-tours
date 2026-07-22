@@ -8,9 +8,9 @@ export const BOOKING_DISPLAY_TTL_HOURS = Number(
 // Capacity describes the size of the physical room each bed lives in; it is
 // NOT a multiplier on booking counts — each unit booked = one bed = one person.
 export const ROOM_CAPACITY = { quad: 4, triple: 3, double: 2 } as const
-export const ROOM_PRICE_GBP = { quad: 1695, triple: 1795, double: 1895 } as const
+export const ROOM_PRICE_GBP = { quad: 1745, triple: 1845, double: 1945 } as const
 export const DEPOSIT_PER_PERSON_GBP = 299
-export const TOTAL_PLACES = 23
+export const TOTAL_PLACES = 2
 
 export const RETURN_DATE = '2026-11-04'
 export const DEPARTURE_DATE = '2026-10-25'
@@ -62,6 +62,21 @@ export function passportNeedsRenewal(expiryISO: string): boolean {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export function isValidEmail(s: string): boolean {
   return EMAIL_RE.test(s) && s.length <= 254
+}
+
+// Reject silly DOBs. The previous floor of 1900-01-01 admitted ages up to
+// ~125, which is implausible for a passenger and a useful canary that the
+// form is being scripted.
+export const MAX_AGE_YEARS = 120
+
+export function isValidDateOfBirth(dob: string, todayISO: string): boolean {
+  if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob)) return false
+  if (dob >= todayISO) return false
+  const [y, m, d] = dob.split('-').map(Number)
+  const [ty, tm, td] = todayISO.split('-').map(Number)
+  let age = ty - y
+  if (tm < m || (tm === m && td < d)) age -= 1
+  return age >= 0 && age <= MAX_AGE_YEARS
 }
 
 export function cap(s: string): string {

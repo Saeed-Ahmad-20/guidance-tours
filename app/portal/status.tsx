@@ -59,14 +59,29 @@ export default function PortalStatus({ reservation }: { reservation: PortalReser
     })
   }
 
+  const [option, setOption] = useState<'deposit' | 'full' | 'custom'>('deposit')
+  const [customRaw, setCustomRaw] = useState('')
+
   const s = reservation.status
   const isPartialTransfer =
     s === 'pending_payment' &&
     reservation.deposit_received_gbp !== null &&
     reservation.deposit_received_gbp < reservation.deposit_amount_gbp
-  const amountDue = isPartialTransfer
+
+  const customAmount = Math.min(
+    reservation.total_cost_gbp,
+    Math.max(reservation.deposit_amount_gbp, Math.floor(Number(customRaw) || reservation.deposit_amount_gbp))
+  )
+  const chosenAmount =
+    option === 'full'
+      ? reservation.total_cost_gbp
+      : option === 'custom'
+      ? customAmount
+      : reservation.deposit_amount_gbp
+  const partialRemaining = isPartialTransfer
     ? reservation.deposit_amount_gbp - reservation.deposit_received_gbp!
-    : reservation.deposit_amount_gbp
+    : 0
+  const displayAmount = isPartialTransfer ? partialRemaining : chosenAmount
 
   return (
     <div className="w-full bg-stone-50 min-h-[calc(100vh-4rem)]">
@@ -99,18 +114,92 @@ export default function PortalStatus({ reservation }: { reservation: PortalReser
               <p className="text-[#C4A348] text-xs font-bold uppercase tracking-widest mb-4">
                 Bank transfer details
               </p>
+
+              {!isPartialTransfer && (
+                <div className="mb-5">
+                  <p className="text-xs text-stone-400 uppercase tracking-wider mb-2">How much would you like to pay?</p>
+                  <div className="flex flex-col gap-2">
+                    <label className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 cursor-pointer transition ${option === 'deposit' ? 'border-[#C4A348]/60 bg-[#C4A348]/10' : 'border-white/10 hover:border-white/20'}`}>
+                      <div className="flex items-center gap-3">
+                        <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${option === 'deposit' ? 'border-[#C4A348]' : 'border-stone-500'}`}>
+                          {option === 'deposit' && <span className="w-2 h-2 rounded-full bg-[#C4A348]" />}
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold text-white">Deposit only</p>
+                          <p className="text-xs text-stone-400">Minimum required to hold your place</p>
+                        </div>
+                      </div>
+                      <span className="font-mono text-[#C4A348] font-bold text-sm whitespace-nowrap">{formatGBP(reservation.deposit_amount_gbp)}</span>
+                      <input type="radio" className="sr-only" checked={option === 'deposit'} onChange={() => setOption('deposit')} />
+                    </label>
+
+                    <label className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 cursor-pointer transition ${option === 'full' ? 'border-[#C4A348]/60 bg-[#C4A348]/10' : 'border-white/10 hover:border-white/20'}`}>
+                      <div className="flex items-center gap-3">
+                        <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${option === 'full' ? 'border-[#C4A348]' : 'border-stone-500'}`}>
+                          {option === 'full' && <span className="w-2 h-2 rounded-full bg-[#C4A348]" />}
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold text-white">Pay in full</p>
+                          <p className="text-xs text-stone-400">No balance to pay later</p>
+                        </div>
+                      </div>
+                      <span className="font-mono text-[#C4A348] font-bold text-sm whitespace-nowrap">{formatGBP(reservation.total_cost_gbp)}</span>
+                      <input type="radio" className="sr-only" checked={option === 'full'} onChange={() => setOption('full')} />
+                    </label>
+
+                    {reservation.total_cost_gbp > reservation.deposit_amount_gbp && (
+                      <label className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 cursor-pointer transition ${option === 'custom' ? 'border-[#C4A348]/60 bg-[#C4A348]/10' : 'border-white/10 hover:border-white/20'}`}>
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${option === 'custom' ? 'border-[#C4A348]' : 'border-stone-500'}`}>
+                            {option === 'custom' && <span className="w-2 h-2 rounded-full bg-[#C4A348]" />}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white">Custom amount</p>
+                            <p className="text-xs text-stone-400">Between deposit and full amount</p>
+                            {option === 'custom' && (
+                              <div className="mt-2 flex items-center gap-1.5" onClick={e => e.preventDefault()}>
+                                <span className="text-stone-400 text-sm">£</span>
+                                <input
+                                  type="number"
+                                  min={reservation.deposit_amount_gbp}
+                                  max={reservation.total_cost_gbp}
+                                  step={1}
+                                  value={customRaw}
+                                  onChange={e => setCustomRaw(e.target.value)}
+                                  placeholder={String(reservation.deposit_amount_gbp)}
+                                  className="w-28 rounded-lg border border-white/20 bg-white/10 px-2 py-1.5 text-sm text-white placeholder-stone-500 focus:border-[#C4A348]/60 focus:outline-none"
+                                  autoFocus
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {option === 'custom' && customRaw && (
+                          <span className="font-mono text-[#C4A348] font-bold text-sm whitespace-nowrap">{formatGBP(customAmount)}</span>
+                        )}
+                        <input type="radio" className="sr-only" checked={option === 'custom'} onChange={() => setOption('custom')} />
+                      </label>
+                    )}
+                  </div>
+                  <div className="h-px bg-white/10 mt-5" />
+                </div>
+              )}
+
               <dl className="grid grid-cols-1 gap-3 text-sm">
                 <BankRow label="Account holder" value={BANK_DETAILS.accountHolder} />
                 <BankRow label="Account number" value={BANK_DETAILS.accountNumber} />
                 <BankRow label="Sort code" value={BANK_DETAILS.sortCode} />
                 <BankRow label="Reference" value={reservation.reservation_code} />
                 <div className="h-px bg-white/10 my-1" />
-                <BankRow
-                  label="Amount"
-                  value={formatGBP(amountDue)}
-                  emphasis
-                />
+                <BankRow label="Amount to transfer" value={formatGBP(displayAmount)} emphasis />
               </dl>
+              {!isPartialTransfer && option !== 'deposit' && (
+                <p className="text-xs text-stone-400 mt-4 leading-relaxed">
+                  {option === 'full'
+                    ? `Full payment for ${reservation.total_people} ${reservation.total_people === 1 ? 'person' : 'people'} — no balance remaining.`
+                    : `Partial payment · Balance of ${formatGBP(reservation.total_cost_gbp - chosenAmount)} due 8 weeks before departure.`}
+                </p>
+              )}
             </section>
 
             <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7 mt-5">
@@ -132,7 +221,7 @@ export default function PortalStatus({ reservation }: { reservation: PortalReser
                 disabled={pending}
                 className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 rounded-full bg-[#C4A348] text-white font-semibold text-sm hover:bg-[#b2932e] transition disabled:opacity-50"
               >
-                {pending ? 'Saving…' : isPartialTransfer ? "I've sent the remaining balance" : "I've sent the deposit"}
+                {pending ? 'Saving…' : isPartialTransfer ? "I've sent the remaining balance" : "I've sent my payment"}
               </button>
             </section>
           </>
@@ -201,8 +290,8 @@ function StatusCard({
       : {
           tone: 'bg-amber-50 border-amber-200 text-amber-900',
           icon: '⏳',
-          title: 'Awaiting your deposit',
-          body: `Transfer ${formatGBP(reservation.deposit_amount_gbp)} using the details below, then press "I've sent the deposit".`,
+          title: 'Awaiting your payment',
+          body: 'Choose how much to pay below, then complete a bank transfer for that amount. Press the button once sent.',
         },
     transfer_submitted: {
       tone: 'bg-blue-50 border-blue-200 text-blue-900',

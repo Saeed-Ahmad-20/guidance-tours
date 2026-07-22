@@ -99,7 +99,8 @@ export default function BookingWizard({
     let n = totalPeople(r)
     const out = { ...r }
     for (const t of ['quad', 'triple', 'double'] as RoomType[]) {
-      while (n > target && out[t] > 0) { out[t]--; n-- }
+      const step = t === 'quad' ? 1 : ROOM_CAPACITY[t]
+      while (n > target && out[t] >= step) { out[t] -= step; n -= step }
     }
     return out
   }
@@ -364,21 +365,23 @@ function RoomsStep(props: {
   const canContinue =
     people >= 1 && leadGivenNames.trim() !== '' && leadSurname.trim() !== ''
 
-  const roomConfigs: { type: RoomType; label: string; perPerson: number; capacity: number }[] = [
-    { type: 'quad', label: 'Quad-room bed', perPerson: ROOM_PRICE_GBP.quad, capacity: ROOM_CAPACITY.quad },
-    { type: 'triple', label: 'Triple-room bed', perPerson: ROOM_PRICE_GBP.triple, capacity: ROOM_CAPACITY.triple },
-    { type: 'double', label: 'Double-room bed', perPerson: ROOM_PRICE_GBP.double, capacity: ROOM_CAPACITY.double },
+  const roomConfigs: { type: RoomType; label: string; perPerson: number; capacity: number; fullRoomOnly: boolean }[] = [
+    { type: 'quad', label: 'Quad-room bed', perPerson: ROOM_PRICE_GBP.quad, capacity: ROOM_CAPACITY.quad, fullRoomOnly: false },
+    { type: 'triple', label: 'Triple room', perPerson: ROOM_PRICE_GBP.triple, capacity: ROOM_CAPACITY.triple, fullRoomOnly: true },
+    { type: 'double', label: 'Double room', perPerson: ROOM_PRICE_GBP.double, capacity: ROOM_CAPACITY.double, fullRoomOnly: true },
   ]
 
   return (
     <div className="flex flex-col gap-8">
       <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7">
-        <h2 className="text-lg font-semibold text-stone-900 mb-1">Choose your beds</h2>
+        <h2 className="text-lg font-semibold text-stone-900 mb-1">Choose your rooms</h2>
         <p className="text-sm text-stone-500 mb-6">
-          Each selection is one bed in a shared room of that type. Prices are per person — mix and match as you wish.
+          Quad-room beds can be mixed and matched — each bed may be shared. Triple and double rooms must be booked as a complete room.
         </p>
         <div className="flex flex-col gap-3">
-          {roomConfigs.map(r => (
+          {roomConfigs.map(r => {
+            const displayValue = r.fullRoomOnly ? rooms[r.type] / r.capacity : rooms[r.type]
+            return (
             <div
               key={r.type}
               className="flex items-center justify-between gap-4 rounded-xl border border-stone-200 p-4"
@@ -386,15 +389,18 @@ function RoomsStep(props: {
               <div className="flex-1">
                 <p className="font-semibold text-stone-900">{r.label}</p>
                 <p className="text-xs text-stone-500">
-                  {sharingDescription(r.capacity, rooms[r.type])} · {formatGBP(r.perPerson)} per person
+                  {r.fullRoomOnly
+                    ? `${r.capacity} people per room · from ${formatGBP(r.perPerson * r.capacity)} per room`
+                    : `${sharingDescription(r.capacity, rooms[r.type])} · from ${formatGBP(r.perPerson)} per person`}
                 </p>
               </div>
               <Stepper2
-                value={rooms[r.type]}
-                onChange={v => setRoom(r.type, v)}
+                value={displayValue}
+                onChange={v => setRoom(r.type, r.fullRoomOnly ? v * r.capacity : v)}
               />
             </div>
-          ))}
+            )
+          })}
         </div>
         {tooMany && (
           <p className="mt-4 text-sm text-amber-700">
@@ -510,7 +516,7 @@ function PassengersStep({
       </div>
 
       {passengers.map((p, i) => {
-        const roomLabel = `${cap(p.room_type)}-room bed`
+        const roomLabel = p.room_type === 'quad' ? `${cap(p.room_type)}-room bed` : `${cap(p.room_type)} room`
         const flagged = p.passport_expiry && passportNeedsRenewal(p.passport_expiry)
         const dobInvalid = p.date_of_birth && !dobIsValid(p.date_of_birth)
         return (
@@ -668,7 +674,7 @@ function ReviewStep({
                   )}
                 </p>
                 <p className="text-xs text-stone-500">
-                  {cap(p.room_type)}-room bed · passport to {p.passport_expiry}
+                  {p.room_type === 'quad' ? `${cap(p.room_type)}-room bed` : `${cap(p.room_type)} room`} · passport to {p.passport_expiry}
                 </p>
               </div>
               {p.passport_renewal_required && (
@@ -686,7 +692,7 @@ function ReviewStep({
         <ol className="list-decimal pl-5 space-y-1">
           <li>We generate your reservation number on the next page.</li>
           <li>You transfer the <strong>{formatGBP(deposit)}</strong> deposit to our account using the reservation number as the reference.</li>
-          <li>You have <strong>24 hours</strong> to complete the transfer before the booking is released.</li>
+          <li>Your reservation is held for <strong>24 hours</strong>, otherwise it will be cancelled.</li>
           <li>Once we confirm receipt, your place is secured.</li>
         </ol>
       </div>
@@ -1068,10 +1074,6 @@ function BookingTermsModal({
       title: 'Final payment',
       body: 'The remaining balance must be paid in full no later than 8 weeks before the departure date. Failure to settle the balance by this deadline may result in the cancellation of your reservation. For amendments or any concerns regarding your travel arrangements, please contact us at tours@guidance.org as early as possible.',
     },
-    {
-      title: 'No-show policy',
-      body: 'Any passenger who does not travel without providing prior written notice will not be entitled to a refund of any amounts paid.',
-    },
   ]
 
   return (
@@ -1089,6 +1091,21 @@ function BookingTermsModal({
               <p className="text-sm text-stone-600 leading-relaxed">{p.body}</p>
             </div>
           ))}
+          <a
+            href="/Guidance_Tours_Umrah_Terms_and_Conditions.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            download
+            className="rounded-xl bg-stone-50 border border-stone-200 p-4 flex items-center justify-between gap-3 hover:bg-stone-100 transition"
+          >
+            <div>
+              <p className="font-semibold text-stone-900 text-sm mb-1">Full terms &amp; conditions</p>
+              <p className="text-sm text-stone-600 leading-relaxed">
+                Including our no-show policy. Download the full PDF for complete details.
+              </p>
+            </div>
+            <span className="text-[#C4A348] text-sm font-semibold whitespace-nowrap">Download ↓</span>
+          </a>
         </div>
         <div className="px-6 py-5 border-t border-stone-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
           <button
@@ -1179,8 +1196,10 @@ function TotalsBar({
 function summaryRooms(rooms: RoomSelection): string {
   const parts: string[] = []
   if (rooms.quad) parts.push(`${rooms.quad} quad-room ${rooms.quad === 1 ? 'bed' : 'beds'}`)
-  if (rooms.triple) parts.push(`${rooms.triple} triple-room ${rooms.triple === 1 ? 'bed' : 'beds'}`)
-  if (rooms.double) parts.push(`${rooms.double} double-room ${rooms.double === 1 ? 'bed' : 'beds'}`)
+  const tripleRooms = rooms.triple / ROOM_CAPACITY.triple
+  if (tripleRooms) parts.push(`${tripleRooms} triple ${tripleRooms === 1 ? 'room' : 'rooms'}`)
+  const doubleRooms = rooms.double / ROOM_CAPACITY.double
+  if (doubleRooms) parts.push(`${doubleRooms} double ${doubleRooms === 1 ? 'room' : 'rooms'}`)
   return parts.join(', ') || '—'
 }
 

@@ -17,18 +17,18 @@ const features = [
 ]
 
 const pricing = [
-  { type: 'Quad', price: 1695, badge: 'Best Value' },
-  { type: 'Triple', price: 1795, badge: null },
-  { type: 'Double', price: 1895, badge: 'Premium' },
+  { type: 'Quad', price: 1745, badge: 'Best Value' },
+  { type: 'Triple', price: 1845, badge: null },
+  { type: 'Double', price: 1945, badge: 'Premium' },
 ]
 
 const hotels = [
   {
     city: 'Makkah',
-    hotel: 'Hilton Double Tree',
-    stars: 4,
+    hotel: 'Hilton Convention Jabal Omar',
+    stars: 5,
     icon: '🕋',
-    url: 'https://www.hilton.com/en/hotels/makdmdi-doubletree-jabal-omar-makkah/',
+    url: 'https://www.hilton.com/en/hotels/makchhi-hilton-hotel-and-convention-jabal-omar-makkah/',
   },
   {
     city: 'Madinah',
@@ -521,6 +521,7 @@ export default function Umrah2026Page() {
                       {/* FIXED: Responsive font sizing */}
                       {item.hotel}
                     </p>
+                    <p className="text-[10px] sm:text-xs text-stone-400 -mt-1 mb-2 sm:mb-3">or similar</p>
                     <div className="flex items-center justify-center gap-1 mb-3 sm:mb-4">
                       {Array.from({ length: item.stars }).map((_, j) => (
                         <ScaleIn key={j} delay={0.3 + j * 0.08}>
@@ -578,7 +579,8 @@ export default function Umrah2026Page() {
                     {/* FIXED: Responsive sizing */}
                     {type}
                   </p>
-                  <div className="mb-2">
+                  <div className="mb-1">
+                    <p className="text-[10px] sm:text-xs text-stone-400 mb-1">from</p>
                     <span className="text-3xl sm:text-4xl md:text-5xl font-bold text-stone-900">
                       {/* FIXED: Smaller on mobile */}
                       <AnimatedCounter target={price} suffix="£" />
@@ -591,6 +593,10 @@ export default function Umrah2026Page() {
               </FadeInWhenVisible>
             ))}
           </div>
+
+          <p className="text-center text-[10px] sm:text-xs text-stone-400 -mt-2 sm:-mt-4 mb-6 sm:mb-8 px-2">
+            Prices shown are subject to increase — book early to secure the current rate.
+          </p>
 
           <FadeInWhenVisible delay={0.3}>
             <motion.div

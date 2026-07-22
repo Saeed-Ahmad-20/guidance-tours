@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { supabaseAdmin } from '../lib/supabase-admin'
 import { sendDepositSubmitted } from '../lib/emails'
 import { checkRateLimit, clientIp, resetRateLimit } from '../lib/rate-limit'
+import { assertSameOrigin } from '../lib/csrf'
 import { isValidEmail } from '../lib/booking'
 import {
   PORTAL_COOKIE,
@@ -19,6 +20,7 @@ export type PortalLoginResult =
   | { ok: false; error: string }
 
 export async function portalLogin(formData: FormData): Promise<PortalLoginResult> {
+  await assertSameOrigin()
   const rawCode = (formData.get('reservation_code') as string | null)?.trim() ?? ''
   const rawSurname = (formData.get('surname') as string | null)?.trim() ?? ''
 
@@ -32,7 +34,7 @@ export async function portalLogin(formData: FormData): Promise<PortalLoginResult
   }
 
   const ip = await clientIp()
-  if (!checkRateLimit('portalLogin', ip, 12, 15 * 60 * 1000)) {
+  if (!(await checkRateLimit('portalLogin', ip, 12, 15 * 60 * 1000))) {
     return { ok: false, error: 'Too many attempts. Please try again later.' }
   }
 
@@ -61,13 +63,13 @@ export async function portalLogin(formData: FormData): Promise<PortalLoginResult
     return { ok: false, error: 'No booking matches those details.' }
   }
 
-  resetRateLimit('portalLogin', ip)
-  const { value, maxAge } = signPortalSession(row.id)
+  await resetRateLimit('portalLogin', ip)
+  const { value, maxAge } = await signPortalSession(row.id)
   const store = await cookies()
   store.set(PORTAL_COOKIE, value, {
     httpOnly: true,
     secure: isProd,
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge,
   })
@@ -76,6 +78,7 @@ export async function portalLogin(formData: FormData): Promise<PortalLoginResult
 }
 
 export async function portalLogout() {
+  await assertSameOrigin()
   const store = await cookies()
   store.delete(PORTAL_COOKIE)
   revalidatePath('/portal')
@@ -84,9 +87,10 @@ export async function portalLogout() {
 export type UpdateContactResult = { ok: true } | { ok: false; error: string }
 
 export async function updateLeadContact(email: string, phone: string): Promise<UpdateContactResult> {
+  await assertSameOrigin()
   const store = await cookies()
   const cookie = store.get(PORTAL_COOKIE)?.value
-  const rid = verifyPortalSession(cookie)
+  const rid = await verifyPortalSession(cookie)
   if (!rid) return { ok: false, error: 'Your session has expired. Please log in again.' }
 
   const trimmedEmail = email.trim()
@@ -117,9 +121,10 @@ export type MarkDepositResult =
   | { ok: false; error: string }
 
 export async function markDepositSent(): Promise<MarkDepositResult> {
+  await assertSameOrigin()
   const store = await cookies()
   const cookie = store.get(PORTAL_COOKIE)?.value
-  const rid = verifyPortalSession(cookie)
+  const rid = await verifyPortalSession(cookie)
   if (!rid) return { ok: false, error: 'Your session has expired. Please log in again.' }
 
   const db = supabaseAdmin()
@@ -182,7 +187,7 @@ export async function markDepositSent(): Promise<MarkDepositResult> {
     return { ok: false, error: 'Something went wrong. Please try again.' }
   }
 
-  void sendDepositSubmitted({
+  await sendDepositSubmitted({
     reservationId: rid,
     reservationCode: row.reservation_code,
     leadName: `${row.lead_given_names} ${row.lead_surname}`.trim(),

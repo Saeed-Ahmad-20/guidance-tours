@@ -3,6 +3,7 @@
 import { supabaseAdmin } from '../lib/supabase-admin'
 import { sendBookingCreated } from '../lib/emails'
 import { checkRateLimit, clientIp } from '../lib/rate-limit'
+import { assertSameOrigin } from '../lib/csrf'
 import { generateReservationCode } from '../lib/reservation-code'
 import {
   BOOKING_TTL_HOURS,
@@ -11,6 +12,7 @@ import {
   RoomSelection,
   TOTAL_PLACES,
   TOUR_SLUG,
+  isValidDateOfBirth,
   isValidEmail,
   passportNeedsRenewal,
   totalCostGBP,
@@ -52,6 +54,7 @@ export type CreateBookingResult =
 export async function createBooking(
   input: CreateBookingInput
 ): Promise<CreateBookingResult> {
+  await assertSameOrigin()
   const { rooms, leadSurname, leadGivenNames, leadEmail, leadPhone, passengers } = input
 
   const people = totalPeople(rooms)
@@ -64,7 +67,7 @@ export async function createBooking(
     return { ok: false, error: 'validation', message: 'Lead email is not a valid address.' }
 
   const ip = await clientIp()
-  if (!checkRateLimit('createBooking', ip, 8, 60 * 60 * 1000)) {
+  if (!(await checkRateLimit('createBooking', ip, 8, 60 * 60 * 1000))) {
     return { ok: false, error: 'server', message: 'Too many booking attempts. Please try again later.' }
   }
 
@@ -74,8 +77,8 @@ export async function createBooking(
       return { ok: false, error: 'validation', message: 'All passenger names are required.' }
     if (!p.date_of_birth || !p.passport_expiry)
       return { ok: false, error: 'validation', message: 'All passenger dates are required.' }
-    if (p.date_of_birth < '1900-01-01' || p.date_of_birth >= today)
-      return { ok: false, error: 'validation', message: 'Date of birth must be between 1 Jan 1900 and today.' }
+    if (!isValidDateOfBirth(p.date_of_birth, today))
+      return { ok: false, error: 'validation', message: 'Enter a realistic date of birth (under 120 years old).' }
     p.passport_renewal_required = passportNeedsRenewal(p.passport_expiry)
   }
 
@@ -106,7 +109,7 @@ export async function createBooking(
     if (!error) {
       const row = Array.isArray(data) ? data[0] : data
       const savedCode = (row?.reservation_code as string | undefined) ?? code
-      void sendBookingCreated({
+      await sendBookingCreated({
         to: leadEmail?.trim() || null,
         leadGivenNames: leadGivenNames.trim(),
         reservationCode: savedCode,
@@ -140,6 +143,7 @@ export type WaitingListInput = {
 }
 
 export async function joinWaitingList(input: WaitingListInput): Promise<{ ok: boolean; error?: string }> {
+  await assertSameOrigin()
   const name = input.name.trim()
   const email = input.email.trim()
   const people = Math.max(1, Math.floor(input.peopleRequested))
@@ -147,7 +151,7 @@ export async function joinWaitingList(input: WaitingListInput): Promise<{ ok: bo
   if (!isValidEmail(email)) return { ok: false, error: 'Please enter a valid email address.' }
 
   const ip = await clientIp()
-  if (!checkRateLimit('joinWaitingList', ip, 10, 60 * 60 * 1000)) {
+  if (!(await checkRateLimit('joinWaitingList', ip, 10, 60 * 60 * 1000))) {
     return { ok: false, error: 'Too many requests. Please try again later.' }
   }
 

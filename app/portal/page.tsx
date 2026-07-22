@@ -49,7 +49,7 @@ export default async function PortalPage({
   const { code } = await searchParams
   const store = await cookies()
   const cookie = store.get(PORTAL_COOKIE)?.value
-  const rid = verifyPortalSession(cookie)
+  const rid = await verifyPortalSession(cookie)
 
   if (!rid) {
     return <LoginForm prefilledCode={code ?? ''} />
