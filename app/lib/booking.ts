@@ -10,7 +10,7 @@ export const BOOKING_DISPLAY_TTL_HOURS = Number(
 export const ROOM_CAPACITY = { quad: 4, triple: 3, double: 2 } as const
 export const ROOM_PRICE_GBP = { quad: 1745, triple: 1845, double: 1945 } as const
 export const DEPOSIT_PER_PERSON_GBP = 299
-export const TOTAL_PLACES = 2
+export const TOTAL_PLACES = 21
 
 export const RETURN_DATE = '2026-11-04'
 export const DEPARTURE_DATE = '2026-10-25'
