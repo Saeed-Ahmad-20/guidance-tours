@@ -342,7 +342,7 @@ export default function Home() {
                   {[
                     { label: 'Dates', value: '25 Oct – 4 Nov', icon: '📅' },
                     { label: 'Duration', value: '10 Nights', icon: '🌙' },
-                    { label: 'From', value: '£1,695 pp', icon: '💷' },
+                    { label: 'From', value: '£1,745 pp', icon: '💷' },
                     { label: 'Deposit', value: '£299', icon: '✅' },
                   ].map((item, i) => (
                     <ScaleIn key={item.label} delay={0.5 + i * 0.1}>
