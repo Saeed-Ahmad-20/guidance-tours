@@ -81,6 +81,9 @@ export default async function AdminDashboard() {
   const depositOutstanding = bookings
     .filter(b => b.status === 'pending_payment' || b.status === 'transfer_submitted')
     .reduce((s, b) => s + b.deposit_amount_gbp, 0)
+  const paymentOutstanding = bookings
+    .filter(b => b.status === 'confirmed')
+    .reduce((s, b) => s + (b.total_cost_gbp - b.deposit_amount_gbp), 0)
 
   return (
     <div className="flex flex-col gap-8">
@@ -96,9 +99,10 @@ export default async function AdminDashboard() {
         <Stat label="Waiting list" value={`${waiting.reduce((s, w) => s + w.people_requested, 0)}`} tone="stone" />
       </section>
 
-      <section className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <Stat label="Deposits received" value={formatGBP(depositReceived)} tone="green" />
         <Stat label="Deposits outstanding" value={formatGBP(depositOutstanding)} tone="amber" />
+        <Stat label="Payment outstanding (confirmed balances)" value={formatGBP(paymentOutstanding)} tone="amber" />
       </section>
 
       <section>
