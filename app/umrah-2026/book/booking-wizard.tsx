@@ -22,7 +22,9 @@ import {
   buildBedLayout,
   cap,
   formatGBP,
+  isValidPromoCode,
   passportNeedsRenewal,
+  roomPriceGBP,
   totalCostGBP,
   totalDepositGBP,
   totalPeople,
@@ -75,16 +77,47 @@ export default function BookingWizard({
   const [leadEmail, setLeadEmail] = useState('')
   const [leadPhone, setLeadPhone] = useState('')
   const [passengers, setPassengers] = useState<Passenger[]>([])
+  const [promoCode, setPromoCode] = useState('')
+  const [promoApplied, setPromoApplied] = useState(false)
+  const [promoError, setPromoError] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [notEnough, setNotEnough] = useState<{ remaining: number } | null>(null)
   const [showPartialDialog, setShowPartialDialog] = useState(false)
   const [pending, startTransition] = useTransition()
 
   const people = totalPeople(rooms)
-  const cost = totalCostGBP(rooms)
+  const cost = totalCostGBP(rooms, promoApplied)
   const deposit = totalDepositGBP(rooms)
   const remaining = availability.remaining
-  const tooMany = people > remaining
+  // Promo-code places are a separate allocation and don't compete with public capacity.
+  const tooMany = !promoApplied && people > remaining
+
+  function clampToFullRooms(r: RoomSelection): RoomSelection {
+    return {
+      quad: r.quad,
+      triple: Math.floor(r.triple / ROOM_CAPACITY.triple) * ROOM_CAPACITY.triple,
+      double: Math.floor(r.double / ROOM_CAPACITY.double) * ROOM_CAPACITY.double,
+    }
+  }
+
+  function handlePromoCodeChange(value: string) {
+    setPromoCode(value)
+    if (promoApplied) {
+      setPromoApplied(false)
+      setRooms(prev => clampToFullRooms(prev))
+    }
+    setPromoError(false)
+  }
+
+  function applyPromoCode() {
+    if (isValidPromoCode(promoCode)) {
+      setPromoApplied(true)
+      setPromoError(false)
+    } else {
+      setPromoApplied(false)
+      setPromoError(true)
+    }
+  }
   const flaggedCount = useMemo(
     () => passengers.filter(p => p.passport_expiry && passportNeedsRenewal(p.passport_expiry)).length,
     [passengers]
@@ -158,6 +191,7 @@ export default function BookingWizard({
       leadEmail: leadEmail.trim() || undefined,
       leadPhone: leadPhone.trim() || undefined,
       passengers,
+      promoCode: promoApplied ? promoCode.trim() : undefined,
     }
     startTransition(async () => {
       const result = await createBooking(input)
@@ -193,8 +227,20 @@ export default function BookingWizard({
           </p>
         </div>
 
-        {remaining === 0 ? (
-          <WaitingListInlineForm />
+        {remaining === 0 && !promoApplied ? (
+          <>
+            <div className="mb-6">
+              <PromoCodeBox
+                promoCode={promoCode}
+                onChange={handlePromoCodeChange}
+                onApply={applyPromoCode}
+                promoApplied={promoApplied}
+                promoError={promoError}
+                helpText="Have a promo code? Promo-code places aren't affected by trip capacity — apply yours to book even though public spaces are full."
+              />
+            </div>
+            <WaitingListInlineForm />
+          </>
         ) : (
           <>
             <Stepper step={step} />
@@ -215,6 +261,11 @@ export default function BookingWizard({
                 cost={cost}
                 deposit={deposit}
                 remaining={remaining}
+                promoCode={promoCode}
+                onPromoCodeChange={handlePromoCodeChange}
+                onApplyPromoCode={applyPromoCode}
+                promoApplied={promoApplied}
+                promoError={promoError}
                 onNext={goToPassengers}
               />
             )}
@@ -239,6 +290,7 @@ export default function BookingWizard({
                 leadPhone={leadPhone}
                 cost={cost}
                 deposit={deposit}
+                promoApplied={promoApplied}
                 flaggedCount={flaggedCount}
                 pending={pending}
                 submitError={submitError}
@@ -342,6 +394,11 @@ function RoomsStep(props: {
   cost: number
   deposit: number
   remaining: number
+  promoCode: string
+  onPromoCodeChange: (s: string) => void
+  onApplyPromoCode: () => void
+  promoApplied: boolean
+  promoError: boolean
   onNext: () => void
 }) {
   const {
@@ -359,16 +416,22 @@ function RoomsStep(props: {
     cost,
     deposit,
     remaining,
+    promoCode,
+    onPromoCodeChange,
+    onApplyPromoCode,
+    promoApplied,
+    promoError,
     onNext,
   } = props
-  const tooMany = people > remaining
+  const tooMany = !promoApplied && people > remaining
   const canContinue =
     people >= 1 && leadGivenNames.trim() !== '' && leadSurname.trim() !== ''
 
-  const roomConfigs: { type: RoomType; label: string; perPerson: number; capacity: number; fullRoomOnly: boolean }[] = [
-    { type: 'quad', label: 'Quad-room bed', perPerson: ROOM_PRICE_GBP.quad, capacity: ROOM_CAPACITY.quad, fullRoomOnly: false },
-    { type: 'triple', label: 'Triple room', perPerson: ROOM_PRICE_GBP.triple, capacity: ROOM_CAPACITY.triple, fullRoomOnly: true },
-    { type: 'double', label: 'Double room', perPerson: ROOM_PRICE_GBP.double, capacity: ROOM_CAPACITY.double, fullRoomOnly: true },
+  const activePrice = roomPriceGBP(promoApplied)
+  const roomConfigs: { type: RoomType; label: string; perPerson: number; originalPerPerson: number; capacity: number; fullRoomOnly: boolean }[] = [
+    { type: 'quad', label: 'Quad-room bed', perPerson: activePrice.quad, originalPerPerson: ROOM_PRICE_GBP.quad, capacity: ROOM_CAPACITY.quad, fullRoomOnly: false },
+    { type: 'triple', label: 'Triple room', perPerson: activePrice.triple, originalPerPerson: ROOM_PRICE_GBP.triple, capacity: ROOM_CAPACITY.triple, fullRoomOnly: !promoApplied },
+    { type: 'double', label: 'Double room', perPerson: activePrice.double, originalPerPerson: ROOM_PRICE_GBP.double, capacity: ROOM_CAPACITY.double, fullRoomOnly: !promoApplied },
   ]
 
   return (
@@ -376,7 +439,9 @@ function RoomsStep(props: {
       <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7">
         <h2 className="text-lg font-semibold text-stone-900 mb-1">Choose your rooms</h2>
         <p className="text-sm text-stone-500 mb-6">
-          Quad-room beds can be mixed and matched — each bed may be shared. Triple and double rooms must be booked as a complete room.
+          {promoApplied
+            ? 'Your promo code lets you book any bed individually — no need to fill a whole triple or double room.'
+            : 'Quad-room beds can be mixed and matched — each bed may be shared. Triple and double rooms must be booked as a complete room.'}
         </p>
         <div className="flex flex-col gap-3">
           {roomConfigs.map(r => {
@@ -389,9 +454,17 @@ function RoomsStep(props: {
               <div className="flex-1">
                 <p className="font-semibold text-stone-900">{r.label}</p>
                 <p className="text-xs text-stone-500">
-                  {r.fullRoomOnly
-                    ? `${r.capacity} people per room · from ${formatGBP(r.perPerson * r.capacity)} per room`
-                    : `${sharingDescription(r.capacity, rooms[r.type])} · from ${formatGBP(r.perPerson)} per person`}
+                  {r.fullRoomOnly ? `${r.capacity} people per room · ` : `${sharingDescription(r.capacity, rooms[r.type])} · `}
+                  from{' '}
+                  {promoApplied && (
+                    <span className="line-through text-stone-400 mr-1">
+                      {formatGBP(r.fullRoomOnly ? r.originalPerPerson * r.capacity : r.originalPerPerson)}
+                    </span>
+                  )}
+                  <span className={promoApplied ? 'text-green-700 font-semibold' : undefined}>
+                    {formatGBP(r.fullRoomOnly ? r.perPerson * r.capacity : r.perPerson)}
+                  </span>{' '}
+                  {r.fullRoomOnly ? 'per room' : 'per person'}
                 </p>
               </div>
               <Stepper2
@@ -409,6 +482,14 @@ function RoomsStep(props: {
           </p>
         )}
       </section>
+
+      <PromoCodeBox
+        promoCode={promoCode}
+        onChange={onPromoCodeChange}
+        onApply={onApplyPromoCode}
+        promoApplied={promoApplied}
+        promoError={promoError}
+      />
 
       <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7">
         <h2 className="text-lg font-semibold text-stone-900 mb-1">Lead Passenger</h2>
@@ -465,6 +546,50 @@ function RoomsStep(props: {
         </button>
       </div>
     </div>
+  )
+}
+
+/* ── Promo code ── */
+function PromoCodeBox({
+  promoCode,
+  onChange,
+  onApply,
+  promoApplied,
+  promoError,
+  helpText,
+}: {
+  promoCode: string
+  onChange: (s: string) => void
+  onApply: () => void
+  promoApplied: boolean
+  promoError: boolean
+  helpText?: string
+}) {
+  return (
+    <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7">
+      <h2 className="text-lg font-semibold text-stone-900 mb-1">Promo code</h2>
+      <p className="text-sm text-stone-500 mb-4">
+        {helpText ?? 'Have a promo code? Enter it and apply it to unlock your discounted price.'}
+      </p>
+      <div className="flex items-center gap-3 max-w-sm">
+        <input
+          value={promoCode}
+          onChange={e => onChange(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onApply() } }}
+          className={inputClass + ' flex-1 uppercase'}
+          placeholder="Enter code"
+        />
+        <button type="button" onClick={onApply} disabled={!promoCode.trim()} className={secondaryBtn}>
+          Apply
+        </button>
+      </div>
+      {promoApplied && (
+        <p className="mt-2 text-sm text-green-700">Promo code applied — discounted prices below.</p>
+      )}
+      {promoError && !promoApplied && (
+        <p className="mt-2 text-sm text-red-600">That code is not valid.</p>
+      )}
+    </section>
   )
 }
 
@@ -611,6 +736,7 @@ function ReviewStep({
   leadPhone,
   cost,
   deposit,
+  promoApplied,
   flaggedCount,
   pending,
   submitError,
@@ -626,6 +752,7 @@ function ReviewStep({
   leadPhone: string
   cost: number
   deposit: number
+  promoApplied: boolean
   flaggedCount: number
   pending: boolean
   submitError: string | null
@@ -644,6 +771,7 @@ function ReviewStep({
           {leadPhone && <SummaryRow label="Phone" value={leadPhone} />}
           <SummaryRow label="Beds" value={summaryRooms(rooms)} />
           <SummaryRow label="Total people" value={`${passengers.length}`} />
+          {promoApplied && <SummaryRow label="Promo code" value="Applied" />}
           <SummaryRow label="Package total" value={formatGBP(cost)} />
           <SummaryRow label="Deposit due now" value={formatGBP(deposit)} emphasis />
         </dl>

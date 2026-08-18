@@ -8,12 +8,14 @@ import { generateReservationCode } from '../lib/reservation-code'
 import {
   BOOKING_TTL_HOURS,
   DEPOSIT_PER_PERSON_GBP,
+  PROMO_CODE,
   Passenger,
   RoomSelection,
   TOTAL_PLACES,
   TOUR_SLUG,
   isValidDateOfBirth,
   isValidEmail,
+  isValidPromoCode,
   passportNeedsRenewal,
   totalCostGBP,
   totalPeople,
@@ -43,6 +45,7 @@ export type CreateBookingInput = {
   leadEmail?: string
   leadPhone?: string
   passengers: Passenger[]
+  promoCode?: string
 }
 
 export type CreateBookingResult =
@@ -55,7 +58,7 @@ export async function createBooking(
   input: CreateBookingInput
 ): Promise<CreateBookingResult> {
   await assertSameOrigin()
-  const { rooms, leadSurname, leadGivenNames, leadEmail, leadPhone, passengers } = input
+  const { rooms, leadSurname, leadGivenNames, leadEmail, leadPhone, passengers, promoCode } = input
 
   const people = totalPeople(rooms)
   if (people < 1) return { ok: false, error: 'validation', message: 'Select at least one room.' }
@@ -82,7 +85,8 @@ export async function createBooking(
     p.passport_renewal_required = passportNeedsRenewal(p.passport_expiry)
   }
 
-  const cost = totalCostGBP(rooms)
+  const promoApplied = isValidPromoCode(promoCode)
+  const cost = totalCostGBP(rooms, promoApplied)
   const deposit = people * DEPOSIT_PER_PERSON_GBP
 
   const db = supabaseAdmin()
@@ -104,6 +108,7 @@ export async function createBooking(
       p_deposit_amount_gbp: deposit,
       p_ttl_hours: BOOKING_TTL_HOURS,
       p_passengers: passengers,
+      p_promo_code: promoApplied ? PROMO_CODE : null,
     })
 
     if (!error) {

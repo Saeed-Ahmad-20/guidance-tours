@@ -10,6 +10,18 @@ export const BOOKING_DISPLAY_TTL_HOURS = Number(
 export const ROOM_CAPACITY = { quad: 4, triple: 3, double: 2 } as const
 export const ROOM_PRICE_GBP = { quad: 1745, triple: 1845, double: 1945 } as const
 export const DEPOSIT_PER_PERSON_GBP = 299
+
+export const PROMO_CODE = 'GHOCT2026'
+export const PROMO_ROOM_PRICE_GBP = { quad: 1559, triple: 1636, double: 1788 } as const
+
+export function isValidPromoCode(code: string | undefined | null): boolean {
+  return !!code && code.trim().toUpperCase() === PROMO_CODE
+}
+
+export function roomPriceGBP(promoApplied: boolean): { quad: number; triple: number; double: number } {
+  return promoApplied ? PROMO_ROOM_PRICE_GBP : ROOM_PRICE_GBP
+}
+
 export const TOTAL_PLACES = 21
 
 export const RETURN_DATE = '2026-11-04'
@@ -43,12 +55,9 @@ export function totalPeople(rooms: RoomSelection): number {
   return rooms.quad + rooms.triple + rooms.double
 }
 
-export function totalCostGBP(rooms: RoomSelection): number {
-  return (
-    rooms.quad * ROOM_PRICE_GBP.quad +
-    rooms.triple * ROOM_PRICE_GBP.triple +
-    rooms.double * ROOM_PRICE_GBP.double
-  )
+export function totalCostGBP(rooms: RoomSelection, promoApplied = false): number {
+  const price = roomPriceGBP(promoApplied)
+  return rooms.quad * price.quad + rooms.triple * price.triple + rooms.double * price.double
 }
 
 export function totalDepositGBP(rooms: RoomSelection): number {
