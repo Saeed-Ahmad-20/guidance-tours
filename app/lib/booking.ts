@@ -22,7 +22,7 @@ export function roomPriceGBP(promoApplied: boolean): { quad: number; triple: num
   return promoApplied ? PROMO_ROOM_PRICE_GBP : ROOM_PRICE_GBP
 }
 
-export const TOTAL_PLACES = 21
+export const TOTAL_PLACES = 22
 
 export const RETURN_DATE = '2026-11-04'
 export const DEPARTURE_DATE = '2026-10-25'
