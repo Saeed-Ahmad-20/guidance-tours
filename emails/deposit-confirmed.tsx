@@ -35,25 +35,53 @@ export default function DepositConfirmedEmail({
   totalPeople,
   depositAmountGBP,
   amountReceivedGBP,
+  isBalanceTopUp,
+  totalCostGBP,
 }: {
   leadGivenNames: string
   reservationCode: string
   totalPeople: number
   depositAmountGBP: number
   amountReceivedGBP?: number
+  isBalanceTopUp?: boolean
+  totalCostGBP?: number
 }) {
-  const isPartial = amountReceivedGBP !== undefined && amountReceivedGBP < depositAmountGBP
+  const isPartial = !isBalanceTopUp && amountReceivedGBP !== undefined && amountReceivedGBP < depositAmountGBP
   const shortfall = isPartial ? depositAmountGBP - amountReceivedGBP! : 0
+  const remainingBalance =
+    isBalanceTopUp && totalCostGBP !== undefined && amountReceivedGBP !== undefined
+      ? Math.max(0, totalCostGBP - amountReceivedGBP)
+      : 0
 
   return (
     <EmailShell
-      preview={isPartial ? `Partial deposit received — ${reservationCode}` : `Deposit received — ${reservationCode} is confirmed`}
-      title={isPartial ? 'Partial deposit received' : 'Your place is confirmed'}
+      preview={
+        isBalanceTopUp
+          ? `Payment received — ${reservationCode}`
+          : isPartial
+          ? `Partial deposit received — ${reservationCode}`
+          : `Deposit received — ${reservationCode} is confirmed`
+      }
+      title={isBalanceTopUp ? 'Payment received' : isPartial ? 'Partial deposit received' : 'Your place is confirmed'}
     >
       <Text style={styles.paragraph}>
         Assalamu Alaykum {leadGivenNames},
       </Text>
-      {isPartial ? (
+      {isBalanceTopUp ? (
+        <>
+          <Text style={styles.paragraph}>
+            Thank you — we&apos;ve received your payment for reservation{' '}
+            <strong>{reservationCode}</strong>.
+          </Text>
+          <Section style={confirmBox}>
+            <Text style={confirmText}>
+              {remainingBalance > 0
+                ? `Remaining balance: £${remainingBalance.toLocaleString('en-GB')}`
+                : 'Your booking is now paid in full.'}
+            </Text>
+          </Section>
+        </>
+      ) : isPartial ? (
         <>
           <Text style={styles.paragraph}>
             We&apos;ve received a payment of{' '}

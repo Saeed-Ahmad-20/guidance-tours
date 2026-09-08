@@ -93,7 +93,7 @@ export async function sendDepositSubmitted(args: {
   leadEmail: string | null
   leadPhone: string | null
   totalPeople: number
-  depositAmountGBP: number
+  claimedAmountGBP: number
 }): Promise<void> {
   const to = adminEmail()
   if (!to) {
@@ -103,14 +103,14 @@ export async function sendDepositSubmitted(args: {
   const adminBookingUrl = `${adminSiteUrl()}/bookings/${args.reservationId}`
   await send({
     to,
-    subject: `Deposit sent: ${args.reservationCode} (£${args.depositAmountGBP})`,
+    subject: `Payment sent: ${args.reservationCode} (£${args.claimedAmountGBP})`,
     react: DepositSubmittedEmail({
       leadName: args.leadName,
       leadEmail: args.leadEmail,
       leadPhone: args.leadPhone,
       reservationCode: args.reservationCode,
       totalPeople: args.totalPeople,
-      depositAmountGBP: args.depositAmountGBP,
+      claimedAmountGBP: args.claimedAmountGBP,
       adminBookingUrl,
     }),
   })
@@ -123,11 +123,15 @@ export async function sendDepositConfirmed(args: {
   totalPeople: number
   depositAmountGBP: number
   amountReceivedGBP?: number
+  isBalanceTopUp?: boolean
+  totalCostGBP?: number
 }): Promise<void> {
-  const isPartial = args.amountReceivedGBP !== undefined && args.amountReceivedGBP < args.depositAmountGBP
+  const isPartial = !args.isBalanceTopUp && args.amountReceivedGBP !== undefined && args.amountReceivedGBP < args.depositAmountGBP
   await send({
     to: args.to,
-    subject: isPartial
+    subject: args.isBalanceTopUp
+      ? `Payment received — ${args.reservationCode}`
+      : isPartial
       ? `Partial deposit received — action needed for ${args.reservationCode}`
       : `Your Umrah place is confirmed — ${args.reservationCode}`,
     react: DepositConfirmedEmail({
@@ -136,6 +140,8 @@ export async function sendDepositConfirmed(args: {
       totalPeople: args.totalPeople,
       depositAmountGBP: args.depositAmountGBP,
       amountReceivedGBP: args.amountReceivedGBP,
+      isBalanceTopUp: args.isBalanceTopUp,
+      totalCostGBP: args.totalCostGBP,
     }),
   })
 }

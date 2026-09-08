@@ -28,7 +28,9 @@ export type BookingRow = {
   total_people: number
   total_cost_gbp: number
   deposit_amount_gbp: number
-  deposit_received_gbp: number | null
+  amount_received_gbp: number
+  last_claimed_amount_gbp: number | null
+  last_claimed_at: string | null
   quad_rooms: number
   triple_rooms: number
   double_rooms: number
@@ -40,7 +42,7 @@ export type BookingRow = {
   passengers?: BookingPassenger[]
 }
 
-type Tab = 'awaiting' | 'pending' | 'confirmed' | 'expired' | 'cancelled' | 'all'
+type Tab = 'claims' | 'awaiting' | 'pending' | 'confirmed' | 'expired' | 'cancelled' | 'all'
 type PanelType = 'confirm' | 'revert' | 'cancel'
 
 export default function BookingsList({
@@ -54,9 +56,12 @@ export default function BookingsList({
     confirmed: number
     expired: number
     cancelled: number
+    claims: number
   }
 }) {
-  const [tab, setTab] = useState<Tab>(counts.awaiting > 0 ? 'awaiting' : 'pending')
+  const [tab, setTab] = useState<Tab>(
+    counts.claims > 0 ? 'claims' : counts.awaiting > 0 ? 'awaiting' : 'pending'
+  )
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [actionId, setActionId] = useState<string | null>(null)
@@ -79,11 +84,12 @@ export default function BookingsList({
   function openPanel(type: PanelType, booking: BookingRow) {
     setPanel({ id: booking.id, type, booking })
     if (type === 'confirm') {
-      const remaining =
-        booking.deposit_received_gbp !== null
-          ? booking.deposit_amount_gbp - booking.deposit_received_gbp
-          : booking.deposit_amount_gbp
-      setAmountStr(remaining.toString())
+      const target = booking.status === 'confirmed' ? booking.total_cost_gbp : booking.deposit_amount_gbp
+      const remaining = Math.max(0, target - booking.amount_received_gbp)
+      const prefill = booking.last_claimed_amount_gbp
+        ? Math.min(booking.last_claimed_amount_gbp, remaining)
+        : remaining
+      setAmountStr(prefill.toString())
     } else {
       setAmountStr('')
     }
@@ -102,6 +108,7 @@ export default function BookingsList({
 
   const filtered = bookings.filter(b => {
     if (tab === 'all') return true
+    if (tab === 'claims') return b.last_claimed_amount_gbp != null
     if (tab === 'awaiting') return b.status === 'transfer_submitted'
     if (tab === 'pending') return b.status === 'pending_payment'
     if (tab === 'confirmed') return b.status === 'confirmed'
@@ -114,7 +121,7 @@ export default function BookingsList({
     if (!panel) return
     const amount = parseFloat(amountStr)
     if (isNaN(amount) || amount <= 0) { setError('Enter a valid amount.'); return }
-    const prevReceived = panel.booking.deposit_received_gbp ?? 0
+    const prevReceived = panel.booking.amount_received_gbp
     const totalAmount = prevReceived + amount
     setActionId(panel.id)
     setError(null)
@@ -151,6 +158,7 @@ export default function BookingsList({
   }
 
   const tabs: { id: Tab; label: string; count: number }[] = [
+    { id: 'claims', label: 'Claims to review', count: counts.claims },
     { id: 'awaiting', label: 'Awaiting confirmation', count: counts.awaiting },
     { id: 'pending', label: 'Pending transfer', count: counts.pending },
     { id: 'confirmed', label: 'Confirmed', count: counts.confirmed },
@@ -160,10 +168,12 @@ export default function BookingsList({
   ]
 
   const received = parseFloat(amountStr)
-  const prevReceived = panel?.booking.deposit_received_gbp ?? 0
+  const prevReceived = panel?.booking.amount_received_gbp ?? 0
   const totalReceived = !isNaN(received) ? prevReceived + received : 0
+  const isBalanceTopUp = panel?.booking.status === 'confirmed'
   const isPartial =
     panel?.type === 'confirm' &&
+    !isBalanceTopUp &&
     !isNaN(received) &&
     received > 0 &&
     totalReceived < (panel?.booking.deposit_amount_gbp ?? Infinity)
@@ -173,6 +183,7 @@ export default function BookingsList({
       <div className="flex flex-wrap gap-2 mb-4">
         {tabs.map(t => {
           const active = t.id === tab
+          const urgent = t.id === 'claims' && t.count > 0
           return (
             <button
               key={t.id}
@@ -180,13 +191,15 @@ export default function BookingsList({
               className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition ${
                 active
                   ? 'bg-stone-900 text-white border-stone-900'
+                  : urgent
+                  ? 'bg-blue-50 text-blue-800 border-blue-300 hover:border-blue-400'
                   : 'bg-white text-stone-600 border-stone-200 hover:border-stone-400'
               }`}
             >
               {t.label}
               <span
                 className={`ml-2 inline-block min-w-[1.25rem] text-center rounded-full px-1.5 ${
-                  active ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'
+                  active ? 'bg-white/20 text-white' : urgent ? 'bg-blue-200 text-blue-900' : 'bg-stone-100 text-stone-500'
                 }`}
               >
                 {t.count}
@@ -216,6 +229,7 @@ export default function BookingsList({
                 <Th>Lead</Th>
                 <Th>People</Th>
                 <Th>Deposit</Th>
+                <Th>Claimed</Th>
                 <Th>Created</Th>
                 <Th>Status</Th>
                 <Th>Actions</Th>
@@ -227,14 +241,20 @@ export default function BookingsList({
                 const pax = b.passengers ?? []
                 const hasPax = pax.length > 0
                 const isActionRow = panel?.id === b.id
-                const canConfirm = b.status === 'transfer_submitted' || b.status === 'pending_payment'
+                const balanceRemaining = Math.max(0, b.total_cost_gbp - b.amount_received_gbp)
+                const canConfirm =
+                  b.status === 'transfer_submitted' ||
+                  b.status === 'pending_payment' ||
+                  (b.status === 'confirmed' && balanceRemaining > 0)
                 const canRevert = b.status === 'transfer_submitted' || b.status === 'confirmed'
                 const canCancelB = b.status !== 'expired' && b.status !== 'cancelled'
                 const busy = isPending && actionId === b.id
 
+                const hasClaim = b.last_claimed_amount_gbp != null
+
                 return (
                   <React.Fragment key={b.id}>
-                    <tr className="border-b border-stone-100 last:border-b-0 hover:bg-stone-50/50">
+                    <tr className={`border-b border-stone-100 last:border-b-0 hover:bg-stone-50/50 ${hasClaim ? 'bg-blue-50/60' : ''}`}>
                       <Td className="align-middle">
                         <button
                           type="button"
@@ -279,16 +299,37 @@ export default function BookingsList({
                       </Td>
                       <Td>{b.total_people}</Td>
                       <Td className="font-semibold">
-                        {b.deposit_received_gbp !== null && b.deposit_received_gbp < b.deposit_amount_gbp ? (
+                        {b.amount_received_gbp < b.deposit_amount_gbp ? (
                           <span>
-                            <span className="text-amber-700">{formatGBP(b.deposit_amount_gbp - b.deposit_received_gbp)} remaining</span>
+                            <span className="text-amber-700">{formatGBP(b.deposit_amount_gbp - b.amount_received_gbp)} remaining</span>
                             <span className="text-stone-400 font-normal text-xs ml-1">of {formatGBP(b.deposit_amount_gbp)}</span>
                           </span>
-                        ) : formatGBP(b.deposit_amount_gbp)}
+                        ) : b.status === 'confirmed' && balanceRemaining > 0 ? (
+                          <span>
+                            {formatGBP(b.deposit_amount_gbp)}
+                            <span className="text-amber-700 font-normal text-xs ml-1">· {formatGBP(balanceRemaining)} balance due</span>
+                          </span>
+                        ) : (
+                          formatGBP(b.deposit_amount_gbp)
+                        )}
+                      </Td>
+                      <Td>
+                        {hasClaim ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 font-semibold text-blue-800 bg-blue-100 rounded-full px-2 py-0.5 text-xs">
+                              {formatGBP(b.last_claimed_amount_gbp!)}
+                            </span>
+                            {b.last_claimed_at && (
+                              <p className="text-[11px] text-stone-400 mt-0.5">{formatDateTime(b.last_claimed_at)}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-stone-300">—</span>
+                        )}
                       </Td>
                       <Td className="text-xs text-stone-500">{formatDateTime(b.created_at)}</Td>
                       <Td>
-                        <StatusPill status={b.status} depositReceivedGBP={b.deposit_received_gbp} depositAmountGBP={b.deposit_amount_gbp} />
+                        <StatusPill status={b.status} amountReceivedGBP={b.amount_received_gbp} depositAmountGBP={b.deposit_amount_gbp} />
                       </Td>
                       <Td>
                         <div className="flex items-center gap-2 flex-wrap">
@@ -298,7 +339,7 @@ export default function BookingsList({
                               disabled={busy}
                               className="text-xs font-semibold bg-emerald-600 text-white rounded-full px-3 py-1.5 hover:bg-emerald-700 transition disabled:opacity-50"
                             >
-                              {busy ? '…' : 'Confirm deposit'}
+                              {busy ? '…' : b.status === 'confirmed' ? 'Record balance payment' : 'Confirm deposit'}
                             </button>
                           )}
                           {canRevert && (
@@ -325,7 +366,7 @@ export default function BookingsList({
 
                     {isOpen && hasPax && (
                       <tr className="bg-stone-50/60 border-b border-stone-100">
-                        <td colSpan={8} className="px-4 py-3">
+                        <td colSpan={9} className="px-4 py-3">
                           <PassengerPanel passengers={pax} />
                         </td>
                       </tr>
@@ -333,13 +374,15 @@ export default function BookingsList({
 
                     {isActionRow && panel?.type === 'confirm' && (
                       <tr className="bg-emerald-50/50 border-b border-stone-100">
-                        <td colSpan={8} className="px-4 py-3">
+                        <td colSpan={9} className="px-4 py-3">
                           <div className="flex flex-col gap-2.5 max-w-sm">
                             <p className="text-xs font-semibold text-stone-700">
-                              {b.deposit_received_gbp !== null ? 'Amount received (this transfer)' : 'Amount received'}
+                              {b.status === 'confirmed' ? 'Balance payment received' : b.amount_received_gbp > 0 ? 'Amount received (this transfer)' : 'Amount received'}
                               <span className="ml-2 font-normal text-stone-400">
-                                {b.deposit_received_gbp !== null
-                                  ? `previously received ${formatGBP(b.deposit_received_gbp)} · remaining ${formatGBP(b.deposit_amount_gbp - b.deposit_received_gbp)}`
+                                {b.status === 'confirmed'
+                                  ? `already received ${formatGBP(b.amount_received_gbp)} · balance ${formatGBP(balanceRemaining)}`
+                                  : b.amount_received_gbp > 0
+                                  ? `previously received ${formatGBP(b.amount_received_gbp)} · remaining ${formatGBP(b.deposit_amount_gbp - b.amount_received_gbp)}`
                                   : `expected ${formatGBP(b.deposit_amount_gbp)}`}
                               </span>
                             </p>
@@ -365,7 +408,7 @@ export default function BookingsList({
                                 disabled={isPending}
                                 className="text-xs font-semibold bg-emerald-600 text-white rounded-full px-3 py-1.5 hover:bg-emerald-700 transition disabled:opacity-50"
                               >
-                                {isPending ? 'Working…' : isPartial ? 'Confirm partial' : 'Confirm'}
+                                {isPending ? 'Working…' : isBalanceTopUp ? 'Record payment' : isPartial ? 'Confirm partial' : 'Confirm'}
                               </button>
                               <button
                                 onClick={closePanel}
@@ -382,7 +425,7 @@ export default function BookingsList({
 
                     {isActionRow && panel?.type === 'revert' && (
                       <tr className="bg-amber-50/50 border-b border-stone-100">
-                        <td colSpan={8} className="px-4 py-3">
+                        <td colSpan={9} className="px-4 py-3">
                           <div className="flex flex-col gap-2.5 max-w-sm">
                             <p className="text-xs font-semibold text-stone-700">
                               Revert to pending — optional message to customer
@@ -417,7 +460,7 @@ export default function BookingsList({
 
                     {isActionRow && panel?.type === 'cancel' && (
                       <tr className="bg-red-50/40 border-b border-stone-100">
-                        <td colSpan={8} className="px-4 py-3">
+                        <td colSpan={9} className="px-4 py-3">
                           <div className="flex flex-col gap-2.5 max-w-sm">
                             <p className="text-xs font-semibold text-stone-700">
                               Cancel booking — optional reason for customer
@@ -506,19 +549,19 @@ function PassengerPanel({ passengers }: { passengers: BookingPassenger[] }) {
 
 function StatusPill({
   status,
-  depositReceivedGBP,
+  amountReceivedGBP,
   depositAmountGBP,
 }: {
   status: BookingRow['status']
-  depositReceivedGBP?: number | null
+  amountReceivedGBP?: number
   depositAmountGBP?: number
 }) {
   const isPartialTransfer =
     status === 'pending_payment' &&
-    depositReceivedGBP !== null &&
-    depositReceivedGBP !== undefined &&
+    amountReceivedGBP !== undefined &&
+    amountReceivedGBP > 0 &&
     depositAmountGBP !== undefined &&
-    depositReceivedGBP < depositAmountGBP
+    amountReceivedGBP < depositAmountGBP
 
   const map: Record<BookingRow['status'], { label: string; cls: string }> = {
     pending_payment: isPartialTransfer

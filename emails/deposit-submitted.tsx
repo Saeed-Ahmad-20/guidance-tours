@@ -19,7 +19,7 @@ export default function DepositSubmittedEmail({
   leadPhone,
   reservationCode,
   totalPeople,
-  depositAmountGBP,
+  claimedAmountGBP,
   adminBookingUrl,
 }: {
   leadName: string
@@ -27,22 +27,22 @@ export default function DepositSubmittedEmail({
   leadPhone: string | null
   reservationCode: string
   totalPeople: number
-  depositAmountGBP: number
+  claimedAmountGBP: number
   adminBookingUrl: string
 }) {
   return (
     <EmailShell
-      preview={`Deposit marked sent: ${reservationCode} · £${depositAmountGBP}`}
-      title="A customer has sent a deposit"
+      preview={`Payment marked sent: ${reservationCode} · £${claimedAmountGBP}`}
+      title="A customer has sent a payment"
     >
       <Text style={styles.paragraph}>
-        <strong>{leadName}</strong> has marked their deposit as sent for reservation{' '}
+        <strong>{leadName}</strong> has marked a payment as sent for reservation{' '}
         <strong>{reservationCode}</strong>.
       </Text>
       <Text style={styles.paragraph}>
         <strong>People:</strong> {totalPeople}
         <br />
-        <strong>Deposit amount:</strong> £{depositAmountGBP.toLocaleString('en-GB')}
+        <strong>Amount claimed sent:</strong> £{claimedAmountGBP.toLocaleString('en-GB')}
         <br />
         <strong>Bank reference to look for:</strong> {reservationCode}
         {leadEmail && (

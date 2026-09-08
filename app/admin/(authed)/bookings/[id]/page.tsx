@@ -18,7 +18,9 @@ type ReservationFull = {
   total_people: number
   total_cost_gbp: number
   deposit_amount_gbp: number
-  deposit_received_gbp: number | null
+  amount_received_gbp: number
+  last_claimed_amount_gbp: number | null
+  last_claimed_at: string | null
   quad_rooms: number
   triple_rooms: number
   double_rooms: number
@@ -48,7 +50,7 @@ async function loadBooking(id: string): Promise<ReservationFull | null> {
   const { data, error } = await db
     .from('reservations')
     .select(
-      'id, reservation_code, lead_given_names, lead_surname, lead_email, lead_phone, total_people, total_cost_gbp, deposit_amount_gbp, deposit_received_gbp, quad_rooms, triple_rooms, double_rooms, status, created_at, expires_at, transfer_submitted_at, confirmed_at, confirmed_by, cancelled_at'
+      'id, reservation_code, lead_given_names, lead_surname, lead_email, lead_phone, total_people, total_cost_gbp, deposit_amount_gbp, amount_received_gbp, last_claimed_amount_gbp, last_claimed_at, quad_rooms, triple_rooms, double_rooms, status, created_at, expires_at, transfer_submitted_at, confirmed_at, confirmed_by, cancelled_at'
     )
     .eq('id', id)
     .maybeSingle()
@@ -92,9 +94,17 @@ export default async function BookingDetailPage({
               {booking.reservation_code}
             </p>
           </div>
-          <StatusBanner status={booking.status} depositReceivedGBP={booking.deposit_received_gbp} depositAmountGBP={booking.deposit_amount_gbp} />
+          <StatusBanner status={booking.status} amountReceivedGBP={booking.amount_received_gbp} depositAmountGBP={booking.deposit_amount_gbp} />
         </div>
       </div>
+
+      {booking.last_claimed_amount_gbp && (
+        <div className="rounded-xl bg-blue-50 border border-blue-200 p-4 text-sm text-blue-900">
+          <span className="font-semibold">Customer says they sent {formatGBP(booking.last_claimed_amount_gbp)}</span>
+          {booking.last_claimed_at && <span className="text-blue-700"> on {formatDateTime(booking.last_claimed_at)}</span>}
+          {' — check the bank and confirm below.'}
+        </div>
+      )}
 
       <section className="bg-white rounded-xl border border-stone-200 p-5 sm:p-6">
         <h2 className="text-sm font-semibold text-stone-900 mb-4">Lead Passenger</h2>
@@ -144,13 +154,35 @@ export default async function BookingDetailPage({
           <DD>{formatGBP(booking.total_cost_gbp)}</DD>
           <DT>Deposit</DT>
           <DD className="font-semibold text-[#8a6e1f]">
-            {booking.deposit_received_gbp !== null && booking.deposit_received_gbp < booking.deposit_amount_gbp ? (
+            {booking.amount_received_gbp < booking.deposit_amount_gbp ? (
               <span>
-                {formatGBP(booking.deposit_amount_gbp - booking.deposit_received_gbp)}{' '}
+                {formatGBP(booking.deposit_amount_gbp - booking.amount_received_gbp)}{' '}
                 <span className="font-normal text-stone-500 text-xs">remaining of {formatGBP(booking.deposit_amount_gbp)}</span>
               </span>
             ) : formatGBP(booking.deposit_amount_gbp)}
           </DD>
+          <DT>Balance</DT>
+          <DD className="font-semibold">
+            {(() => {
+              const balance = Math.max(0, booking.total_cost_gbp - booking.amount_received_gbp)
+              return balance > 0 ? (
+                <span className="text-amber-700">{formatGBP(balance)} outstanding</span>
+              ) : (
+                <span className="text-emerald-700">Paid in full</span>
+              )
+            })()}
+          </DD>
+          {booking.last_claimed_amount_gbp && (
+            <>
+              <DT>Customer claims sent</DT>
+              <DD>
+                {formatGBP(booking.last_claimed_amount_gbp)}
+                {booking.last_claimed_at && (
+                  <span className="text-stone-500 text-xs ml-2">on {formatDateTime(booking.last_claimed_at)}</span>
+                )}
+              </DD>
+            </>
+          )}
           <DT>Created</DT>
           <DD>{formatDateTime(booking.created_at)}</DD>
           <DT>Expires</DT>
@@ -189,7 +221,14 @@ export default async function BookingDetailPage({
       {hasActions && (
         <section className="bg-white rounded-xl border border-stone-200 p-5 sm:p-6">
           <h2 className="text-sm font-semibold text-stone-900 mb-3">Actions</h2>
-          <BookingActions id={booking.id} status={booking.status} depositAmountGBP={booking.deposit_amount_gbp} depositReceivedGBP={booking.deposit_received_gbp ?? undefined} />
+          <BookingActions
+            id={booking.id}
+            status={booking.status}
+            totalCostGBP={booking.total_cost_gbp}
+            depositAmountGBP={booking.deposit_amount_gbp}
+            amountReceivedGBP={booking.amount_received_gbp}
+            lastClaimedAmountGBP={booking.last_claimed_amount_gbp ?? undefined}
+          />
         </section>
       )}
     </div>
@@ -198,19 +237,19 @@ export default async function BookingDetailPage({
 
 function StatusBanner({
   status,
-  depositReceivedGBP,
+  amountReceivedGBP,
   depositAmountGBP,
 }: {
   status: ReservationFull['status']
-  depositReceivedGBP?: number | null
+  amountReceivedGBP?: number
   depositAmountGBP?: number
 }) {
   const isPartialTransfer =
     status === 'pending_payment' &&
-    depositReceivedGBP !== null &&
-    depositReceivedGBP !== undefined &&
+    amountReceivedGBP !== undefined &&
+    amountReceivedGBP > 0 &&
     depositAmountGBP !== undefined &&
-    depositReceivedGBP < depositAmountGBP
+    amountReceivedGBP < depositAmountGBP
 
   const map: Record<ReservationFull['status'], { label: string; cls: string }> = {
     pending_payment: isPartialTransfer

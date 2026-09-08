@@ -11,13 +11,17 @@ type Panel = 'confirm' | 'revert' | 'cancel' | 'message' | null
 export default function BookingActions({
   id,
   status,
+  totalCostGBP,
   depositAmountGBP,
-  depositReceivedGBP,
+  amountReceivedGBP,
+  lastClaimedAmountGBP,
 }: {
   id: string
   status: Status
+  totalCostGBP: number
   depositAmountGBP: number
-  depositReceivedGBP?: number
+  amountReceivedGBP: number
+  lastClaimedAmountGBP?: number
 }) {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
@@ -26,7 +30,10 @@ export default function BookingActions({
   const [amountStr, setAmountStr] = useState('')
   const [note, setNote] = useState('')
 
-  const canConfirm = status === 'pending_payment' || status === 'transfer_submitted'
+  const balanceRemaining = Math.max(0, totalCostGBP - amountReceivedGBP)
+  const isBalanceTopUp = status === 'confirmed'
+  const canConfirm =
+    status === 'pending_payment' || status === 'transfer_submitted' || (status === 'confirmed' && balanceRemaining > 0)
   const canRevert = status === 'transfer_submitted' || status === 'confirmed'
   const canCancel = status !== 'expired' && status !== 'cancelled'
   const canMessage = status !== 'expired' && status !== 'cancelled'
@@ -34,11 +41,9 @@ export default function BookingActions({
   function openPanel(p: Panel) {
     setPanel(p)
     if (p === 'confirm') {
-      const remaining =
-        depositReceivedGBP !== undefined
-          ? depositAmountGBP - depositReceivedGBP
-          : depositAmountGBP
-      setAmountStr(remaining.toString())
+      const remaining = isBalanceTopUp ? balanceRemaining : Math.max(0, depositAmountGBP - amountReceivedGBP)
+      const prefill = lastClaimedAmountGBP ? Math.min(lastClaimedAmountGBP, remaining) : remaining
+      setAmountStr(prefill.toString())
     } else {
       setAmountStr('')
     }
@@ -61,7 +66,7 @@ export default function BookingActions({
       setError('Enter a valid amount.')
       return
     }
-    const totalAmount = (depositReceivedGBP ?? 0) + amount
+    const totalAmount = amountReceivedGBP + amount
     setError(null)
     startTransition(async () => {
       const r = await confirmDeposit(id, totalAmount)
@@ -90,8 +95,8 @@ export default function BookingActions({
   }
 
   const received = parseFloat(amountStr)
-  const totalReceived = (depositReceivedGBP ?? 0) + (isNaN(received) ? 0 : received)
-  const isPartial = !isNaN(received) && received > 0 && totalReceived < depositAmountGBP
+  const totalReceived = amountReceivedGBP + (isNaN(received) ? 0 : received)
+  const isPartial = !isBalanceTopUp && !isNaN(received) && received > 0 && totalReceived < depositAmountGBP
 
   return (
     <div className="flex flex-col gap-3">
@@ -108,7 +113,7 @@ export default function BookingActions({
             disabled={isPending}
             className="inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition disabled:opacity-50"
           >
-            Confirm deposit received
+            {isBalanceTopUp ? 'Record balance payment' : 'Confirm deposit received'}
           </button>
         )}
         {canRevert && (
@@ -143,22 +148,30 @@ export default function BookingActions({
       {panel === 'confirm' && (
         <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 flex flex-col gap-3">
           <div>
-            <p className="text-sm font-semibold text-stone-900">Confirm deposit received</p>
+            <p className="text-sm font-semibold text-stone-900">
+              {isBalanceTopUp ? 'Record balance payment' : 'Confirm deposit received'}
+            </p>
             <p className="text-xs text-stone-500 mt-0.5">
-              {depositReceivedGBP !== undefined
+              {isBalanceTopUp
+                ? 'Enter the amount received toward the remaining balance. Customer will be emailed.'
+                : amountReceivedGBP > 0
                 ? 'Enter the amount received in this transfer. Customer will be emailed.'
                 : 'Enter the amount actually received. Customer will be emailed.'}
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-stone-600 uppercase tracking-wider">
-              {depositReceivedGBP !== undefined ? 'Amount received (this transfer)' : 'Amount received'}
+              {isBalanceTopUp || amountReceivedGBP > 0 ? 'Amount received (this transfer)' : 'Amount received'}
             </label>
-            {depositReceivedGBP !== undefined && (
+            {isBalanceTopUp ? (
               <p className="text-xs text-stone-400">
-                Previously received {formatGBP(depositReceivedGBP)} · remaining expected {formatGBP(depositAmountGBP - depositReceivedGBP)}
+                Already received {formatGBP(amountReceivedGBP)} · balance remaining {formatGBP(balanceRemaining)}
               </p>
-            )}
+            ) : amountReceivedGBP > 0 ? (
+              <p className="text-xs text-stone-400">
+                Previously received {formatGBP(amountReceivedGBP)} · remaining expected {formatGBP(depositAmountGBP - amountReceivedGBP)}
+              </p>
+            ) : null}
             <div className="flex items-center gap-2">
               <span className="text-stone-500 text-sm">£</span>
               <input
@@ -169,7 +182,7 @@ export default function BookingActions({
                 onChange={e => setAmountStr(e.target.value)}
                 className="w-32 text-sm rounded-lg border border-stone-200 bg-white px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-stone-400"
               />
-              {depositReceivedGBP === undefined && (
+              {!isBalanceTopUp && amountReceivedGBP === 0 && (
                 <span className="text-xs text-stone-400">expected {formatGBP(depositAmountGBP)}</span>
               )}
             </div>
@@ -185,7 +198,7 @@ export default function BookingActions({
               disabled={isPending}
               className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm transition disabled:opacity-50"
             >
-              {isPending ? 'Working…' : isPartial ? 'Confirm partial payment' : 'Confirm full payment'}
+              {isPending ? 'Working…' : isBalanceTopUp ? 'Record payment' : isPartial ? 'Confirm partial payment' : 'Confirm full payment'}
             </button>
             <button
               onClick={() => setPanel(null)}

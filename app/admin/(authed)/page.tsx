@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { supabaseAdmin } from '../../lib/supabase-admin'
-import { TOTAL_PLACES, TOUR_SLUG, formatGBP } from '../../lib/booking'
+import { TOTAL_PLACES, TOUR_SLUG } from '../../lib/booking'
 import BookingsList, {
   type BookingPassenger,
   type BookingRow,
 } from './bookings-list'
 import WaitingListManager from './waiting-list-manager'
+import PaymentStatsToggle from './payment-stats-toggle'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +28,7 @@ async function loadDashboard() {
     db
       .from('reservations')
       .select(
-        'id, reservation_code, lead_given_names, lead_surname, lead_email, lead_phone, total_people, total_cost_gbp, deposit_amount_gbp, deposit_received_gbp, quad_rooms, triple_rooms, double_rooms, status, created_at, expires_at, transfer_submitted_at, confirmed_at'
+        'id, reservation_code, lead_given_names, lead_surname, lead_email, lead_phone, total_people, total_cost_gbp, deposit_amount_gbp, amount_received_gbp, last_claimed_amount_gbp, last_claimed_at, quad_rooms, triple_rooms, double_rooms, status, created_at, expires_at, transfer_submitted_at, confirmed_at'
       )
       .order('created_at', { ascending: false }),
     db
@@ -73,17 +74,25 @@ export default async function AdminDashboard() {
     confirmed: bookings.filter(b => b.status === 'confirmed').length,
     expired: bookings.filter(b => b.status === 'expired').length,
     cancelled: bookings.filter(b => b.status === 'cancelled').length,
+    claims: bookings.filter(b => b.last_claimed_amount_gbp != null).length,
   }
 
-  const depositReceived = bookings
-    .filter(b => b.status === 'confirmed')
-    .reduce((s, b) => s + b.deposit_amount_gbp, 0)
-  const depositOutstanding = bookings
-    .filter(b => b.status === 'pending_payment' || b.status === 'transfer_submitted')
-    .reduce((s, b) => s + b.deposit_amount_gbp, 0)
-  const paymentOutstanding = bookings
-    .filter(b => b.status === 'confirmed')
-    .reduce((s, b) => s + (b.total_cost_gbp - b.deposit_amount_gbp), 0)
+  const activeBookings = bookings.filter(
+    b => b.status === 'pending_payment' || b.status === 'transfer_submitted' || b.status === 'confirmed'
+  )
+  const depositsReceived = activeBookings.reduce(
+    (s, b) => s + Math.min(b.amount_received_gbp, b.deposit_amount_gbp),
+    0
+  )
+  const depositsOutstanding = activeBookings.reduce(
+    (s, b) => s + Math.max(0, b.deposit_amount_gbp - b.amount_received_gbp),
+    0
+  )
+  const totalReceived = activeBookings.reduce((s, b) => s + b.amount_received_gbp, 0)
+  const totalOutstanding = activeBookings.reduce(
+    (s, b) => s + Math.max(0, b.total_cost_gbp - b.amount_received_gbp),
+    0
+  )
 
   return (
     <div className="flex flex-col gap-8">
@@ -92,17 +101,21 @@ export default async function AdminDashboard() {
         <p className="text-stone-500 text-sm mt-1">Umrah 2026 bookings overview</p>
       </section>
 
-      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+      <section className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
         <Stat label="Places taken" value={`${taken} / ${TOTAL_PLACES}`} tone="stone" />
         <Stat label="Remaining" value={`${remaining}`} tone="gold" />
+        <Stat label="Claims to review" value={`${counts.claims}`} tone={counts.claims > 0 ? 'blue' : 'stone'} />
         <Stat label="Awaiting admin action" value={`${counts.awaiting}`} tone={counts.awaiting > 0 ? 'blue' : 'stone'} />
         <Stat label="Waiting list" value={`${waiting.reduce((s, w) => s + w.people_requested, 0)}`} tone="stone" />
       </section>
 
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-        <Stat label="Deposits received" value={formatGBP(depositReceived)} tone="green" />
-        <Stat label="Deposits outstanding" value={formatGBP(depositOutstanding)} tone="amber" />
-        <Stat label="Payment outstanding (confirmed balances)" value={formatGBP(paymentOutstanding)} tone="amber" />
+      <section>
+        <PaymentStatsToggle
+          depositsReceived={depositsReceived}
+          depositsOutstanding={depositsOutstanding}
+          totalReceived={totalReceived}
+          totalOutstanding={totalOutstanding}
+        />
       </section>
 
       <section>

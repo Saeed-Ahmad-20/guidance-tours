@@ -101,7 +101,7 @@ export type AdminActionResult =
 
 export async function confirmDeposit(
   reservationId: string,
-  amountReceived?: number
+  amountReceived: number
 ): Promise<AdminActionResult> {
   await assertSameOrigin()
   const admin = await requireAdmin().catch(() => null)
@@ -110,7 +110,7 @@ export async function confirmDeposit(
   const db = supabaseAdmin()
   const { data: current, error: readErr } = await db
     .from('reservations')
-    .select('status, reservation_code, lead_given_names, lead_email, total_people, deposit_amount_gbp')
+    .select('status, reservation_code, lead_given_names, lead_email, total_people, total_cost_gbp, deposit_amount_gbp, amount_received_gbp')
     .eq('id', reservationId)
     .maybeSingle()
   if (readErr || !current) return { ok: false, error: 'Booking not found.' }
@@ -121,13 +121,20 @@ export async function confirmDeposit(
     lead_given_names: string
     lead_email: string | null
     total_people: number
+    total_cost_gbp: number
     deposit_amount_gbp: number
+    amount_received_gbp: number
   }
-  if (row.status === 'confirmed') return { ok: false, error: 'Already confirmed.' }
   if (row.status === 'expired' || row.status === 'cancelled')
     return { ok: false, error: `Cannot confirm a ${row.status} booking.` }
 
-  const isPartial = amountReceived !== undefined && amountReceived < row.deposit_amount_gbp
+  const newTotal = Math.min(row.total_cost_gbp, Math.max(0, amountReceived))
+  if (newTotal <= row.amount_received_gbp) {
+    return { ok: false, error: 'Amount must be greater than the amount already received.' }
+  }
+
+  const wasConfirmed = row.status === 'confirmed'
+  const isPartial = !wasConfirmed && newTotal < row.deposit_amount_gbp
 
   const partialExpiry = new Date(
     Date.now() + BOOKING_TTL_HOURS * 60 * 60 * 1000
@@ -136,18 +143,34 @@ export async function confirmDeposit(
   const { error } = await db
     .from('reservations')
     .update(
-      isPartial
+      wasConfirmed
+        ? {
+            amount_received_gbp: newTotal,
+            last_claimed_amount_gbp: null,
+            last_claimed_at: null,
+          }
+        : isPartial
         ? {
             status: 'pending_payment',
-            deposit_received_gbp: amountReceived,
+            amount_received_gbp: newTotal,
             admin_note: null,
             transfer_submitted_at: null,
             expires_at: partialExpiry,
+            last_claimed_amount_gbp: null,
+            last_claimed_at: null,
           }
-        : { status: 'confirmed', confirmed_at: new Date().toISOString(), confirmed_by: admin, deposit_received_gbp: null, admin_note: null }
+        : {
+            status: 'confirmed',
+            confirmed_at: new Date().toISOString(),
+            confirmed_by: admin,
+            amount_received_gbp: newTotal,
+            admin_note: null,
+            last_claimed_amount_gbp: null,
+            last_claimed_at: null,
+          }
     )
     .eq('id', reservationId)
-    .in('status', ['pending_payment', 'transfer_submitted'])
+    .in('status', ['pending_payment', 'transfer_submitted', 'confirmed'])
 
   if (error) {
     console.error('confirmDeposit error:', error.message)
@@ -160,7 +183,9 @@ export async function confirmDeposit(
     reservationCode: row.reservation_code,
     totalPeople: row.total_people,
     depositAmountGBP: row.deposit_amount_gbp,
-    amountReceivedGBP: amountReceived,
+    amountReceivedGBP: newTotal,
+    isBalanceTopUp: wasConfirmed,
+    totalCostGBP: row.total_cost_gbp,
   })
 
   revalidatePath('/admin')
@@ -203,7 +228,8 @@ export async function revertToPending(
       transfer_submitted_at: null,
       confirmed_at: null,
       confirmed_by: null,
-      deposit_received_gbp: null,
+      last_claimed_amount_gbp: null,
+      last_claimed_at: null,
       expires_at: newExpiry,
       admin_note: adminNote?.trim() || null,
     })

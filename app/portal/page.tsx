@@ -17,7 +17,7 @@ async function loadReservation(rid: string): Promise<PortalReservation | null> {
   const { data, error } = await db
     .from('reservations')
     .select(
-      'id, reservation_code, lead_given_names, lead_surname, lead_email, lead_phone, total_people, total_cost_gbp, deposit_amount_gbp, status, created_at, expires_at, transfer_submitted_at, confirmed_at, admin_note, deposit_received_gbp'
+      'id, reservation_code, lead_given_names, lead_surname, lead_email, lead_phone, total_people, total_cost_gbp, deposit_amount_gbp, status, created_at, expires_at, transfer_submitted_at, confirmed_at, admin_note, amount_received_gbp, last_claimed_amount_gbp, last_claimed_at'
     )
     .eq('id', rid)
     .maybeSingle()

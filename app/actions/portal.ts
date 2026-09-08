@@ -120,7 +120,7 @@ export type MarkDepositResult =
   | { ok: true }
   | { ok: false; error: string }
 
-export async function markDepositSent(): Promise<MarkDepositResult> {
+export async function markPaymentSent(amountClaimedGbp: number): Promise<MarkDepositResult> {
   await assertSameOrigin()
   const store = await cookies()
   const cookie = store.get(PORTAL_COOKIE)?.value
@@ -133,7 +133,7 @@ export async function markDepositSent(): Promise<MarkDepositResult> {
   const { data: current, error: readErr } = await db
     .from('reservations')
     .select(
-      'status, reservation_code, lead_given_names, lead_surname, lead_email, lead_phone, total_people, deposit_amount_gbp, deposit_received_gbp'
+      'status, reservation_code, lead_given_names, lead_surname, lead_email, lead_phone, total_people, total_cost_gbp, deposit_amount_gbp, amount_received_gbp'
     )
     .eq('id', rid)
     .maybeSingle()
@@ -147,8 +147,9 @@ export async function markDepositSent(): Promise<MarkDepositResult> {
     lead_email: string | null
     lead_phone: string | null
     total_people: number
+    total_cost_gbp: number
     deposit_amount_gbp: number
-    deposit_received_gbp: number | null
+    amount_received_gbp: number
   }
   const status = row.status
 
@@ -159,31 +160,37 @@ export async function markDepositSent(): Promise<MarkDepositResult> {
         'This booking has expired because the deposit window passed. Please make a new booking.',
     }
   }
-  if (status === 'confirmed') {
-    return { ok: false, error: 'This booking is already confirmed.' }
-  }
   if (status === 'cancelled') {
     return { ok: false, error: 'This booking was cancelled.' }
   }
-  const isPartialTransfer =
-    status === 'transfer_submitted' &&
-    row.deposit_received_gbp !== null &&
-    row.deposit_received_gbp < row.deposit_amount_gbp
-  if (status === 'transfer_submitted' && !isPartialTransfer) {
-    return { ok: false, error: 'Your transfer is already being reviewed.' }
+
+  const remaining = Math.max(0, row.total_cost_gbp - row.amount_received_gbp)
+  if (remaining <= 0) {
+    return { ok: false, error: 'Your booking is fully paid — there is nothing outstanding.' }
+  }
+
+  const claimed = Math.min(remaining, Math.max(0, Math.floor(amountClaimedGbp) || 0))
+  if (claimed <= 0) {
+    return { ok: false, error: 'Enter a valid amount.' }
+  }
+
+  const updateData: Record<string, unknown> = {
+    last_claimed_amount_gbp: claimed,
+    last_claimed_at: new Date().toISOString(),
+  }
+  if (status === 'pending_payment') {
+    updateData.status = 'transfer_submitted'
+    updateData.transfer_submitted_at = new Date().toISOString()
   }
 
   const { error } = await db
     .from('reservations')
-    .update({
-      status: 'transfer_submitted',
-      transfer_submitted_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', rid)
-    .in('status', ['pending_payment', 'transfer_submitted'])
+    .in('status', ['pending_payment', 'transfer_submitted', 'confirmed'])
 
   if (error) {
-    console.error('markDepositSent error:', error.message)
+    console.error('markPaymentSent error:', error.message)
     return { ok: false, error: 'Something went wrong. Please try again.' }
   }
 
@@ -194,7 +201,7 @@ export async function markDepositSent(): Promise<MarkDepositResult> {
     leadEmail: row.lead_email,
     leadPhone: row.lead_phone,
     totalPeople: row.total_people,
-    depositAmountGBP: row.deposit_amount_gbp,
+    claimedAmountGBP: claimed,
   })
 
   revalidatePath('/portal')
