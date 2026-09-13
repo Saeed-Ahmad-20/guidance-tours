@@ -28,6 +28,10 @@ Every one is platform-agnostic.
 | `SITE_URL` | Public site origin, e.g. `https://www.guidancetours.co.uk` |
 | `ADMIN_SITE_URL` | Admin origin, e.g. `https://admin.guidancetours.co.uk` |
 | `CRON_SECRET` | 32+ random bytes hex, required as a Bearer token by the cron route |
+| `GOOGLE_DRIVE_OAUTH_CLIENT_ID` | OAuth client id (Desktop app) used to upload passport photos to Google Drive |
+| `GOOGLE_DRIVE_OAUTH_CLIENT_SECRET` | OAuth client secret for the same client |
+| `GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN` | Long-lived refresh token, minted once via `scripts/get-drive-refresh-token.mjs` |
+| `GOOGLE_DRIVE_PASSPORT_FOLDER_ID` | Destination Drive folder id (optional — defaults to the folder already configured in code) |
 
 ## 2. Supabase
 
@@ -35,6 +39,55 @@ Run the SQL from the session (tables, functions, plus the
 `alter table reservations add column if not exists expiry_notified_at timestamptz;`
 migration from Phase 5). RLS is enabled with no policies — only the server
 service role key can read/write.
+
+## 2b. Google Drive (passport photo uploads)
+
+Passengers upload their passport photo from the customer portal; the server
+uploads it to a Google Drive folder using OAuth as the real Google account
+that owns the folder — **not** a service account. Service accounts have no
+storage quota of their own and cannot own files in a personal Google
+account, even inside a folder shared with them (confirmed by testing, not a
+documentation quirk); the fix is OAuth impersonation of the real account
+with a refresh token minted once and reused indefinitely.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) (project
+   `guidance-tours` or your own), enable the **Google Drive API**.
+2. Under **OAuth consent screen**: User type External, fill in the basic
+   fields, add the Drive folder's owner as a **test user**, then click
+   **Publish App**. Publishing (even unverified) is required — an
+   unpublished ("Testing") app's refresh tokens expire after 7 days, which
+   would silently break uploads a week after setup.
+3. Under **Credentials → Create Credentials → OAuth client ID**, choose
+   **Desktop app**, and note the **Client ID** and **Client Secret**.
+4. Set `GOOGLE_DRIVE_OAUTH_CLIENT_ID` and `GOOGLE_DRIVE_OAUTH_CLIENT_SECRET`
+   to those values, then run:
+   ```bash
+   node --env-file=.env.local scripts/get-drive-refresh-token.mjs
+   ```
+   Open the printed URL, sign in as the account that owns the destination
+   Drive folder, and approve access. The script prints a refresh token —
+   set that as `GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN`. This is a one-time step;
+   the token does not expire from normal use.
+5. Optionally set `GOOGLE_DRIVE_PASSPORT_FOLDER_ID` if the destination
+   folder ever changes (the id is the segment after `/folders/` in the
+   folder's URL). Because uploads authenticate as the folder's own owner,
+   no separate folder-sharing step is needed.
+6. Run both migrations against your Supabase project:
+   [20260913_passport_photo_upload.sql](supabase/migrations/20260913_passport_photo_upload.sql)
+   (adds `passport_photo_uploaded_at`) and
+   [20260914_passport_photo_storage.sql](supabase/migrations/20260914_passport_photo_storage.sql)
+   (creates the private `passport-photos` Storage bucket and adds
+   `passport_photo_path`).
+
+Every upload is saved to **both** Google Drive and a private Supabase
+Storage bucket. The Storage copy is what the portal displays back to the
+passenger — Drive files aren't set up to be embeddable/public. Uploaded
+files are named `<Given names> <Surname> passport.<ext>` in Drive and accept
+JPG, PNG, WEBP, or PDF up to 10MB. Once a passenger has a photo on file, the
+upload option disappears (server-enforced, not just hidden in the UI) — to
+let someone redo an upload, an admin must first clear
+`passport_photo_uploaded_at` and `passport_photo_path` for that passenger
+row.
 
 ## 3. Build and run
 

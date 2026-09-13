@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { supabaseAdmin } from '../lib/supabase-admin'
 import { PORTAL_COOKIE, verifyPortalSession } from '../lib/portal-session'
 import { BOOKING_DISPLAY_TTL_HOURS, BOOKING_TTL_HOURS } from '../lib/booking'
+import { getPassportPhotoSignedUrl } from '../lib/passport-storage'
 import LoginForm from './login-form'
 import PortalStatus, { type PortalReservation } from './status'
 
@@ -25,7 +26,7 @@ async function loadReservation(rid: string): Promise<PortalReservation | null> {
 
   const { data: passengers } = await db
     .from('reservation_passengers')
-    .select('given_names, surname, person_type, room_type, room_index, passport_expiry, passport_renewal_required')
+    .select('id, given_names, surname, person_type, room_type, room_index, passport_expiry, passport_renewal_required, passport_photo_uploaded_at, passport_photo_path')
     .eq('reservation_id', rid)
     .order('position', { ascending: true })
 
@@ -34,10 +35,33 @@ async function loadReservation(rid: string): Promise<PortalReservation | null> {
     new Date(row.expires_at).getTime() - BUFFER_MS
   ).toISOString()
 
+  const rawPassengers = (passengers ?? []) as Array<{
+    id: string
+    given_names: string
+    surname: string
+    person_type: 'adult' | 'infant'
+    room_type: 'quad' | 'triple' | 'double'
+    room_index: number
+    passport_expiry: string
+    passport_renewal_required: boolean
+    passport_photo_uploaded_at: string | null
+    passport_photo_path: string | null
+  }>
+
+  const withPhotoUrls = await Promise.all(
+    rawPassengers.map(async p => ({
+      ...p,
+      passport_photo_url: p.passport_photo_path
+        ? await getPassportPhotoSignedUrl(p.passport_photo_path)
+        : null,
+      passport_photo_is_pdf: p.passport_photo_path?.toLowerCase().endsWith('.pdf') ?? false,
+    }))
+  )
+
   return {
     ...row,
     display_expires_at: displayExpiresAt,
-    passengers: (passengers ?? []) as PortalReservation['passengers'],
+    passengers: withPhotoUrls as PortalReservation['passengers'],
   }
 }
 

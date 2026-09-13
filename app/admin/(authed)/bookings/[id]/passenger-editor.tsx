@@ -22,6 +22,7 @@ type PassengerRow = {
   date_of_birth: string
   passport_expiry: string
   passport_renewal_required: boolean
+  passport_photo_uploaded_at: string | null
 }
 
 export default function PassengerEditor({
@@ -83,6 +84,9 @@ function PassengerReadRow({
         </p>
         <p className="text-xs text-stone-500 mt-0.5">
           {cap(p.room_type)}-room bed · DOB: {p.date_of_birth} · Passport to: {p.passport_expiry}
+        </p>
+        <p className={`text-xs mt-0.5 ${p.passport_photo_uploaded_at ? 'text-emerald-700' : 'text-stone-400'}`}>
+          {p.passport_photo_uploaded_at ? '✓ Passport photo uploaded' : 'Passport photo not uploaded yet'}
         </p>
       </div>
       <button

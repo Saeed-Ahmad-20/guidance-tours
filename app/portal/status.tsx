@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { markPaymentSent, portalLogout, updateLeadContact } from '../actions/portal'
+import { markPaymentSent, portalLogout, updateLeadContact, uploadPassportPhoto } from '../actions/portal'
 import { BANK_DETAILS, cap, formatGBP } from '../lib/booking'
 
 export type PortalReservation = {
@@ -26,6 +26,7 @@ export type PortalReservation = {
   last_claimed_amount_gbp: number | null
   last_claimed_at: string | null
   passengers: Array<{
+    id: string
     given_names: string
     surname: string
     person_type: 'adult' | 'infant'
@@ -33,6 +34,9 @@ export type PortalReservation = {
     room_index: number
     passport_expiry: string
     passport_renewal_required: boolean
+    passport_photo_uploaded_at: string | null
+    passport_photo_url: string | null
+    passport_photo_is_pdf: boolean
   }>
 }
 
@@ -286,11 +290,15 @@ export default function PortalStatus({ reservation }: { reservation: PortalReser
         )}
 
         <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7 mt-5">
-          <h2 className="font-semibold text-stone-900 mb-3">Passengers</h2>
-          <ul className="divide-y divide-stone-100">
-            {reservation.passengers.map((p, i) => (
-              <li key={i} className="py-3 flex items-center justify-between text-sm">
-                <div>
+          <h2 className="font-semibold text-stone-900 mb-1">Passengers</h2>
+          <p className="text-sm text-stone-500 mb-1">
+            Please upload a clear photo or scan of each passenger&apos;s passport (photo page).
+          </p>
+          <PassportExample />
+          <ul className="divide-y divide-stone-100 mt-2">
+            {reservation.passengers.map((p) => (
+              <li key={p.id} className="py-3 flex items-center justify-between gap-4 text-sm">
+                <div className="min-w-0">
                   <p className="text-stone-900">
                     {p.given_names} {p.surname}
                     {p.person_type === 'infant' && (
@@ -300,9 +308,15 @@ export default function PortalStatus({ reservation }: { reservation: PortalReser
                   <p className="text-xs text-stone-500">
                     {cap(p.room_type)}-room bed · passport to {p.passport_expiry}
                   </p>
+                  <PassportUpload
+                    passengerId={p.id}
+                    passengerName={`${p.given_names} ${p.surname}`}
+                    photoUrl={p.passport_photo_url}
+                    isPdf={p.passport_photo_is_pdf}
+                  />
                 </div>
                 {p.passport_renewal_required && (
-                  <span className="text-xs text-amber-700 font-semibold">Renewal req.</span>
+                  <span className="text-xs text-amber-700 font-semibold shrink-0">Renewal req.</span>
                 )}
               </li>
             ))}
@@ -542,6 +556,181 @@ function ContactEditor({ email, phone }: { email: string; phone: string }) {
         </div>
       </div>
     </section>
+  )
+}
+
+const ACCEPTED_PASSPORT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+
+function PassportUpload({
+  passengerId,
+  passengerName,
+  photoUrl,
+  isPdf,
+}: {
+  passengerId: string
+  passengerName: string
+  photoUrl: string | null
+  isPdf: boolean
+}) {
+  const router = useRouter()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [justUploaded, setJustUploaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
+
+  // Once a photo is on file, there is no re-upload control at all — the
+  // server action also rejects a second upload, so this isn't just cosmetic.
+  if (photoUrl) {
+    return (
+      <div className="mt-2 flex items-center gap-3 flex-wrap">
+        <p className="text-xs font-semibold text-emerald-700">✓ Upload successful</p>
+        <a
+          href={photoUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs font-semibold text-[#C4A348] hover:underline"
+        >
+          View full size {isPdf ? 'document' : 'photo'} ↗
+        </a>
+      </div>
+    )
+  }
+
+  if (justUploaded) {
+    return (
+      <div className="mt-2">
+        <p className="text-xs font-semibold text-emerald-700">✓ Upload successful</p>
+      </div>
+    )
+  }
+
+  function resetPending() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPendingFile(null)
+    setPreviewUrl(null)
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
+  function onChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setError(null)
+    if (!ACCEPTED_PASSPORT_TYPES.includes(file.type)) {
+      setError('Please choose a JPG, PNG, WEBP image, or a PDF.')
+      if (inputRef.current) inputRef.current.value = ''
+      return
+    }
+    setPendingFile(file)
+    setPreviewUrl(file.type === 'application/pdf' ? null : URL.createObjectURL(file))
+  }
+
+  function onConfirm() {
+    if (!pendingFile) return
+    setError(null)
+    const fd = new FormData()
+    fd.set('file', pendingFile)
+    startTransition(async () => {
+      const r = await uploadPassportPhoto(passengerId, fd)
+      resetPending()
+      if (r.ok) {
+        setJustUploaded(true)
+        router.refresh()
+      } else {
+        setError(r.error)
+      }
+    })
+  }
+
+  if (pendingFile) {
+    return (
+      <div className="mt-2 rounded-xl border border-stone-200 bg-stone-50 p-3">
+        <p className="text-xs text-stone-600 mb-2">
+          Confirm this is the correct passport photo page for <strong>{passengerName}</strong>.
+          Once uploaded, it can&apos;t be changed.
+        </p>
+        {previewUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={previewUrl}
+            alt={`Preview of the passport photo to upload for ${passengerName}`}
+            className="w-full max-w-[180px] rounded-lg border border-stone-200 mb-2"
+          />
+        ) : (
+          <p className="text-xs text-stone-500 mb-2">📄 {pendingFile.name}</p>
+        )}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={pending}
+            className="inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-[#C4A348] text-white font-semibold text-xs hover:bg-[#b2932e] transition disabled:opacity-50"
+          >
+            {pending ? 'Uploading…' : 'Yes, upload this'}
+          </button>
+          <button
+            type="button"
+            onClick={resetPending}
+            disabled={pending}
+            className="inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-white border border-stone-300 text-stone-600 font-semibold text-xs hover:border-stone-400 transition disabled:opacity-50"
+          >
+            Choose a different file
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-1.5">
+      <label className="inline-flex items-center gap-1.5 text-xs font-semibold cursor-pointer text-[#C4A348] hover:underline">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
+          className="sr-only"
+          onChange={onChange}
+        />
+        Upload passport photo
+      </label>
+      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+    </div>
+  )
+}
+
+function PassportExample() {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="mb-2">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="text-xs font-semibold text-[#C4A348] hover:underline"
+      >
+        {open ? 'Hide example' : 'See example'}
+      </button>
+      {open && (
+        <div className="mt-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/passport-example.png"
+            alt="Example passport photo page showing where the name, photo, and details are"
+            className="w-full max-w-xs rounded-lg border border-stone-200"
+          />
+          <p className="text-xs text-stone-400 mt-1">
+            Example only — make sure your own passport&apos;s photo page is clear and fully visible.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 

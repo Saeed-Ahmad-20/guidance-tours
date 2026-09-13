@@ -42,6 +42,7 @@ type ReservationFull = {
     date_of_birth: string
     passport_expiry: string
     passport_renewal_required: boolean
+    passport_photo_uploaded_at: string | null
   }>
 }
 
@@ -58,7 +59,7 @@ async function loadBooking(id: string): Promise<ReservationFull | null> {
   const { data: passengers } = await db
     .from('reservation_passengers')
     .select(
-      'id, position, given_names, surname, person_type, room_type, room_index, date_of_birth, passport_expiry, passport_renewal_required'
+      'id, position, given_names, surname, person_type, room_type, room_index, date_of_birth, passport_expiry, passport_renewal_required, passport_photo_uploaded_at'
     )
     .eq('reservation_id', id)
     .order('position', { ascending: true })

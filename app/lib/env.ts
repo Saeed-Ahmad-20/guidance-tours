@@ -67,3 +67,30 @@ export function getSupabaseAdminConfig(): { url: string; serviceRoleKey: string 
   }
   return { url, serviceRoleKey }
 }
+
+// Folder from https://drive.google.com/drive/folders/<id> — override via env
+// if the destination folder ever changes.
+const DEFAULT_PASSPORT_FOLDER_ID = '1rdV3qq6k7sW5khlwReNN8ER6gimhaZ-C'
+
+// A service account can't own files in a personal Google account (it has no
+// storage quota of its own — confirmed by testing, not a hunch), so uploads
+// authenticate as the real Google account that owns the destination folder
+// via OAuth, using a refresh token minted once during setup (see
+// scripts/get-drive-refresh-token.js).
+export function getGoogleDriveConfig(): {
+  clientId: string
+  clientSecret: string
+  refreshToken: string
+  folderId: string
+} {
+  const clientId = read('GOOGLE_DRIVE_OAUTH_CLIENT_ID')
+  const clientSecret = read('GOOGLE_DRIVE_OAUTH_CLIENT_SECRET')
+  const refreshToken = read('GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN')
+  const folderId = read('GOOGLE_DRIVE_PASSPORT_FOLDER_ID') ?? DEFAULT_PASSPORT_FOLDER_ID
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error(
+      'Passport photo upload requires GOOGLE_DRIVE_OAUTH_CLIENT_ID, GOOGLE_DRIVE_OAUTH_CLIENT_SECRET, and GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN.'
+    )
+  }
+  return { clientId, clientSecret, refreshToken, folderId }
+}

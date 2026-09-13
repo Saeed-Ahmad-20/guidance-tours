@@ -7,6 +7,8 @@ import { sendDepositSubmitted } from '../lib/emails'
 import { checkRateLimit, clientIp, resetRateLimit } from '../lib/rate-limit'
 import { assertSameOrigin } from '../lib/csrf'
 import { isValidEmail } from '../lib/booking'
+import { uploadPassportPhotoToDrive } from '../lib/google-drive'
+import { uploadPassportPhotoToStorage } from '../lib/passport-storage'
 import {
   PORTAL_COOKIE,
   signPortalSession,
@@ -203,6 +205,109 @@ export async function markPaymentSent(amountClaimedGbp: number): Promise<MarkDep
     totalPeople: row.total_people,
     claimedAmountGBP: claimed,
   })
+
+  revalidatePath('/portal')
+  return { ok: true }
+}
+
+const PASSPORT_PHOTO_MIME_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'application/pdf': 'pdf',
+}
+const MAX_PASSPORT_PHOTO_BYTES = 10 * 1024 * 1024
+
+export type UploadPassportPhotoResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+export async function uploadPassportPhoto(
+  passengerId: string,
+  formData: FormData
+): Promise<UploadPassportPhotoResult> {
+  await assertSameOrigin()
+  const store = await cookies()
+  const cookie = store.get(PORTAL_COOKIE)?.value
+  const rid = await verifyPortalSession(cookie)
+  if (!rid) return { ok: false, error: 'Your session has expired. Please log in again.' }
+
+  const ip = await clientIp()
+  if (!(await checkRateLimit('uploadPassportPhoto', ip, 30, 60 * 60 * 1000))) {
+    return { ok: false, error: 'Too many uploads. Please try again later.' }
+  }
+
+  const file = formData.get('file')
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: 'Please choose a file to upload.' }
+  }
+
+  const ext = PASSPORT_PHOTO_MIME_EXT[file.type]
+  if (!ext) {
+    return { ok: false, error: 'Please upload a JPG, PNG, WEBP image, or a PDF.' }
+  }
+  if (file.size > MAX_PASSPORT_PHOTO_BYTES) {
+    return { ok: false, error: 'File is too large (max 10MB).' }
+  }
+
+  const db = supabaseAdmin()
+
+  // Name comes from our own records, never from client input, so the
+  // resulting Drive filename can't be spoofed via the upload request.
+  const { data: passenger, error: passengerErr } = await db
+    .from('reservation_passengers')
+    .select('id, given_names, surname, passport_photo_uploaded_at')
+    .eq('id', passengerId)
+    .eq('reservation_id', rid)
+    .maybeSingle()
+
+  if (passengerErr || !passenger) return { ok: false, error: 'Passenger not found.' }
+  const p = passenger as {
+    id: string
+    given_names: string
+    surname: string
+    passport_photo_uploaded_at: string | null
+  }
+
+  // One shot only — once a photo is on file for this passenger, uploading
+  // again is rejected server-side too, not just hidden in the UI.
+  if (p.passport_photo_uploaded_at) {
+    return { ok: false, error: 'A passport photo has already been uploaded for this passenger.' }
+  }
+
+  const safeName = `${p.given_names} ${p.surname}`
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+  const filename = `${safeName} passport.${ext}`
+  const storagePath = `${rid}/${p.id}.${ext}`
+
+  const buffer = Buffer.from(await file.arrayBuffer())
+
+  try {
+    await uploadPassportPhotoToDrive({ buffer, filename, mimeType: file.type })
+  } catch (err) {
+    console.error('uploadPassportPhoto drive error:', err)
+    return { ok: false, error: 'Could not upload the file. Please try again.' }
+  }
+
+  try {
+    await uploadPassportPhotoToStorage({ path: storagePath, buffer, mimeType: file.type })
+  } catch (err) {
+    console.error('uploadPassportPhoto storage error:', err)
+    return { ok: false, error: 'Could not upload the file. Please try again.' }
+  }
+
+  const { error: updateErr } = await db
+    .from('reservation_passengers')
+    .update({
+      passport_photo_uploaded_at: new Date().toISOString(),
+      passport_photo_path: storagePath,
+    })
+    .eq('id', p.id)
+  if (updateErr) {
+    console.error('uploadPassportPhoto db update error:', updateErr.message)
+  }
 
   revalidatePath('/portal')
   return { ok: true }

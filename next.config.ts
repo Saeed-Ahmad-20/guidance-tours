@@ -17,6 +17,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  experimental: {
+    serverActions: {
+      // Passport photo uploads go through a Server Action and are capped at
+      // 10MB in app/actions/portal.ts; Next's own default body limit (1MB)
+      // is smaller than that, so it needs raising to match.
+      bodySizeLimit: "12mb",
+    },
+  },
 };
 
 export default nextConfig;
