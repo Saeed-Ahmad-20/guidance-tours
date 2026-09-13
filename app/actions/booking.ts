@@ -8,14 +8,13 @@ import { generateReservationCode } from '../lib/reservation-code'
 import {
   BOOKING_TTL_HOURS,
   DEPOSIT_PER_PERSON_GBP,
-  PROMO_CODE,
   Passenger,
   RoomSelection,
   TOTAL_PLACES,
   TOUR_SLUG,
   isValidDateOfBirth,
   isValidEmail,
-  isValidPromoCode,
+  normalizePromoCode,
   passportNeedsRenewal,
   totalCostGBP,
   totalPeople,
@@ -85,8 +84,8 @@ export async function createBooking(
     p.passport_renewal_required = passportNeedsRenewal(p.passport_expiry)
   }
 
-  const promoApplied = isValidPromoCode(promoCode)
-  const cost = totalCostGBP(rooms, promoApplied)
+  const normalizedPromoCode = normalizePromoCode(promoCode)
+  const cost = totalCostGBP(rooms, normalizedPromoCode)
   const deposit = people * DEPOSIT_PER_PERSON_GBP
 
   const db = supabaseAdmin()
@@ -108,7 +107,7 @@ export async function createBooking(
       p_deposit_amount_gbp: deposit,
       p_ttl_hours: BOOKING_TTL_HOURS,
       p_passengers: passengers,
-      p_promo_code: promoApplied ? PROMO_CODE : null,
+      p_promo_code: normalizedPromoCode,
     })
 
     if (!error) {

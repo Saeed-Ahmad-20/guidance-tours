@@ -86,7 +86,7 @@ export default function BookingWizard({
   const [pending, startTransition] = useTransition()
 
   const people = totalPeople(rooms)
-  const cost = totalCostGBP(rooms, promoApplied)
+  const cost = totalCostGBP(rooms, promoApplied ? promoCode : null)
   const deposit = totalDepositGBP(rooms)
   const remaining = availability.remaining
   // Promo-code places are a separate allocation and don't compete with public capacity.
@@ -427,7 +427,7 @@ function RoomsStep(props: {
   const canContinue =
     people >= 1 && leadGivenNames.trim() !== '' && leadSurname.trim() !== ''
 
-  const activePrice = roomPriceGBP(promoApplied)
+  const activePrice = roomPriceGBP(promoApplied ? promoCode : null)
   const roomConfigs: { type: RoomType; label: string; perPerson: number; originalPerPerson: number; capacity: number; fullRoomOnly: boolean }[] = [
     { type: 'quad', label: 'Quad-room bed', perPerson: activePrice.quad, originalPerPerson: ROOM_PRICE_GBP.quad, capacity: ROOM_CAPACITY.quad, fullRoomOnly: false },
     { type: 'triple', label: 'Triple room', perPerson: activePrice.triple, originalPerPerson: ROOM_PRICE_GBP.triple, capacity: ROOM_CAPACITY.triple, fullRoomOnly: !promoApplied },

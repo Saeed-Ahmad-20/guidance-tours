@@ -11,15 +11,25 @@ export const ROOM_CAPACITY = { quad: 4, triple: 3, double: 2 } as const
 export const ROOM_PRICE_GBP = { quad: 1745, triple: 1845, double: 1945 } as const
 export const DEPOSIT_PER_PERSON_GBP = 299
 
-export const PROMO_CODE = 'GHOCT2026'
-export const PROMO_ROOM_PRICE_GBP = { quad: 1559, triple: 1636, double: 1788 } as const
+export const PROMO_CODES = {
+  GHOCT2026: { quad: 1559, triple: 1636, double: 1788 },
+  ADMIN2026: { quad: 0, triple: 77, double: 152 },
+} as const
 
-export function isValidPromoCode(code: string | undefined | null): boolean {
-  return !!code && code.trim().toUpperCase() === PROMO_CODE
+export type PromoCode = keyof typeof PROMO_CODES
+
+export function normalizePromoCode(code: string | undefined | null): PromoCode | null {
+  const normalized = code?.trim().toUpperCase()
+  return normalized && normalized in PROMO_CODES ? (normalized as PromoCode) : null
 }
 
-export function roomPriceGBP(promoApplied: boolean): { quad: number; triple: number; double: number } {
-  return promoApplied ? PROMO_ROOM_PRICE_GBP : ROOM_PRICE_GBP
+export function isValidPromoCode(code: string | undefined | null): boolean {
+  return normalizePromoCode(code) !== null
+}
+
+export function roomPriceGBP(promoCode?: string | null): { quad: number; triple: number; double: number } {
+  const normalized = normalizePromoCode(promoCode)
+  return normalized ? PROMO_CODES[normalized] : ROOM_PRICE_GBP
 }
 
 export const TOTAL_PLACES = 22
@@ -55,8 +65,8 @@ export function totalPeople(rooms: RoomSelection): number {
   return rooms.quad + rooms.triple + rooms.double
 }
 
-export function totalCostGBP(rooms: RoomSelection, promoApplied = false): number {
-  const price = roomPriceGBP(promoApplied)
+export function totalCostGBP(rooms: RoomSelection, promoCode?: string | null): number {
+  const price = roomPriceGBP(promoCode)
   return rooms.quad * price.quad + rooms.triple * price.triple + rooms.double * price.double
 }
 
