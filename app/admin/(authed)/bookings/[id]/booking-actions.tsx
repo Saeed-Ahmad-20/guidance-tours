@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { cancelBooking, confirmDeposit, messageCustomer, revertToPending } from '../../../../actions/admin'
-import { formatGBP } from '../../../../lib/booking'
+import { effectiveDepositGBP, formatGBP } from '../../../../lib/booking'
 
 type Status = 'pending_payment' | 'transfer_submitted' | 'confirmed' | 'expired' | 'cancelled'
 type Panel = 'confirm' | 'revert' | 'cancel' | 'message' | null
@@ -32,6 +32,8 @@ export default function BookingActions({
 
   const balanceRemaining = Math.max(0, totalCostGBP - amountReceivedGBP)
   const isBalanceTopUp = status === 'confirmed'
+  const effectiveDeposit = effectiveDepositGBP(totalCostGBP, depositAmountGBP)
+  const payInFullOnly = effectiveDeposit >= totalCostGBP
   const canConfirm =
     status === 'pending_payment' || status === 'transfer_submitted' || (status === 'confirmed' && balanceRemaining > 0)
   const canRevert = status === 'transfer_submitted' || status === 'confirmed'
@@ -41,7 +43,7 @@ export default function BookingActions({
   function openPanel(p: Panel) {
     setPanel(p)
     if (p === 'confirm') {
-      const remaining = isBalanceTopUp ? balanceRemaining : Math.max(0, depositAmountGBP - amountReceivedGBP)
+      const remaining = isBalanceTopUp ? balanceRemaining : Math.max(0, effectiveDeposit - amountReceivedGBP)
       const prefill = lastClaimedAmountGBP ? Math.min(lastClaimedAmountGBP, remaining) : remaining
       setAmountStr(prefill.toString())
     } else {
@@ -96,7 +98,7 @@ export default function BookingActions({
 
   const received = parseFloat(amountStr)
   const totalReceived = amountReceivedGBP + (isNaN(received) ? 0 : received)
-  const isPartial = !isBalanceTopUp && !isNaN(received) && received > 0 && totalReceived < depositAmountGBP
+  const isPartial = !isBalanceTopUp && !isNaN(received) && received > 0 && totalReceived < effectiveDeposit
 
   return (
     <div className="flex flex-col gap-3">
@@ -113,7 +115,7 @@ export default function BookingActions({
             disabled={isPending}
             className="inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition disabled:opacity-50"
           >
-            {isBalanceTopUp ? 'Record balance payment' : 'Confirm deposit received'}
+            {isBalanceTopUp ? 'Record balance payment' : payInFullOnly ? 'Confirm payment in full' : 'Confirm deposit received'}
           </button>
         )}
         {canRevert && (
@@ -149,11 +151,13 @@ export default function BookingActions({
         <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 flex flex-col gap-3">
           <div>
             <p className="text-sm font-semibold text-stone-900">
-              {isBalanceTopUp ? 'Record balance payment' : 'Confirm deposit received'}
+              {isBalanceTopUp ? 'Record balance payment' : payInFullOnly ? 'Confirm payment in full' : 'Confirm deposit received'}
             </p>
             <p className="text-xs text-stone-500 mt-0.5">
               {isBalanceTopUp
                 ? 'Enter the amount received toward the remaining balance. Customer will be emailed.'
+                : payInFullOnly
+                ? "This discount code's total is below our usual deposit, so the full amount is due upfront rather than a deposit. Customer will be emailed."
                 : amountReceivedGBP > 0
                 ? 'Enter the amount received in this transfer. Customer will be emailed.'
                 : 'Enter the amount actually received. Customer will be emailed.'}
@@ -169,7 +173,7 @@ export default function BookingActions({
               </p>
             ) : amountReceivedGBP > 0 ? (
               <p className="text-xs text-stone-400">
-                Previously received {formatGBP(amountReceivedGBP)} · remaining expected {formatGBP(depositAmountGBP - amountReceivedGBP)}
+                Previously received {formatGBP(amountReceivedGBP)} · remaining expected {formatGBP(effectiveDeposit - amountReceivedGBP)}
               </p>
             ) : null}
             <div className="flex items-center gap-2">
@@ -183,12 +187,12 @@ export default function BookingActions({
                 className="w-32 text-sm rounded-lg border border-stone-200 bg-white px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-stone-400"
               />
               {!isBalanceTopUp && amountReceivedGBP === 0 && (
-                <span className="text-xs text-stone-400">expected {formatGBP(depositAmountGBP)}</span>
+                <span className="text-xs text-stone-400">expected {formatGBP(effectiveDeposit)}</span>
               )}
             </div>
             {isPartial && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1">
-                Total received will be {formatGBP(totalReceived)} — shortfall of {formatGBP(depositAmountGBP - totalReceived)}. Customer will be notified.
+                Total received will be {formatGBP(totalReceived)} — shortfall of {formatGBP(effectiveDeposit - totalReceived)}. Customer will be notified.
               </p>
             )}
           </div>

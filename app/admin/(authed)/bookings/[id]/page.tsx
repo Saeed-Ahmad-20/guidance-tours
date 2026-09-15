@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabaseAdmin } from '../../../../lib/supabase-admin'
-import { formatGBP } from '../../../../lib/booking'
+import { effectiveDepositGBP, formatGBP } from '../../../../lib/booking'
 import BookingActions from './booking-actions'
 import LeadContactEditor from './lead-contact-editor'
 import PassengerEditor from './passenger-editor'
@@ -95,7 +95,11 @@ export default async function BookingDetailPage({
               {booking.reservation_code}
             </p>
           </div>
-          <StatusBanner status={booking.status} amountReceivedGBP={booking.amount_received_gbp} depositAmountGBP={booking.deposit_amount_gbp} />
+          <StatusBanner
+            status={booking.status}
+            amountReceivedGBP={booking.amount_received_gbp}
+            depositAmountGBP={effectiveDepositGBP(booking.total_cost_gbp, booking.deposit_amount_gbp)}
+          />
         </div>
       </div>
 
@@ -153,14 +157,19 @@ export default async function BookingDetailPage({
           <DD>{booking.total_people}</DD>
           <DT>Package total</DT>
           <DD>{formatGBP(booking.total_cost_gbp)}</DD>
-          <DT>Deposit</DT>
+          <DT>{effectiveDepositGBP(booking.total_cost_gbp, booking.deposit_amount_gbp) >= booking.total_cost_gbp ? 'Due (full)' : 'Deposit'}</DT>
           <DD className="font-semibold text-[#8a6e1f]">
-            {booking.amount_received_gbp < booking.deposit_amount_gbp ? (
-              <span>
-                {formatGBP(booking.deposit_amount_gbp - booking.amount_received_gbp)}{' '}
-                <span className="font-normal text-stone-500 text-xs">remaining of {formatGBP(booking.deposit_amount_gbp)}</span>
-              </span>
-            ) : formatGBP(booking.deposit_amount_gbp)}
+            {(() => {
+              const deposit = effectiveDepositGBP(booking.total_cost_gbp, booking.deposit_amount_gbp)
+              return booking.amount_received_gbp < deposit ? (
+                <span>
+                  {formatGBP(deposit - booking.amount_received_gbp)}{' '}
+                  <span className="font-normal text-stone-500 text-xs">remaining of {formatGBP(deposit)}</span>
+                </span>
+              ) : (
+                formatGBP(deposit)
+              )
+            })()}
           </DD>
           <DT>Balance</DT>
           <DD className="font-semibold">

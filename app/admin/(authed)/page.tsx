@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { supabaseAdmin } from '../../lib/supabase-admin'
-import { TOTAL_PLACES, TOUR_SLUG } from '../../lib/booking'
+import { effectiveDepositGBP, TOTAL_PLACES, TOUR_SLUG } from '../../lib/booking'
 import BookingsList, {
   type BookingPassenger,
   type BookingRow,
@@ -38,7 +38,7 @@ async function loadDashboard() {
     db
       .from('reservation_passengers')
       .select(
-        'reservation_id, position, given_names, surname, person_type, room_type, date_of_birth, passport_expiry, passport_renewal_required'
+        'reservation_id, position, given_names, surname, person_type, room_type, date_of_birth, passport_expiry, passport_renewal_required, passport_photo_uploaded_at'
       )
       .order('position', { ascending: true }),
   ])
@@ -81,17 +81,33 @@ export default async function AdminDashboard() {
     b => b.status === 'pending_payment' || b.status === 'transfer_submitted' || b.status === 'confirmed'
   )
   const depositsReceived = activeBookings.reduce(
-    (s, b) => s + Math.min(b.amount_received_gbp, b.deposit_amount_gbp),
+    (s, b) => s + Math.min(b.amount_received_gbp, effectiveDepositGBP(b.total_cost_gbp, b.deposit_amount_gbp)),
     0
   )
   const depositsOutstanding = activeBookings.reduce(
-    (s, b) => s + Math.max(0, b.deposit_amount_gbp - b.amount_received_gbp),
+    (s, b) => s + Math.max(0, effectiveDepositGBP(b.total_cost_gbp, b.deposit_amount_gbp) - b.amount_received_gbp),
     0
   )
   const totalReceived = activeBookings.reduce((s, b) => s + b.amount_received_gbp, 0)
   const totalOutstanding = activeBookings.reduce(
     (s, b) => s + Math.max(0, b.total_cost_gbp - b.amount_received_gbp),
     0
+  )
+
+  // Places taken (above) only counts against public capacity — promo-code
+  // bookings are a separate allocation that don't compete with it, so the
+  // true number of beds committed can be higher. Admins need to see that
+  // real total for catering/rooming, not just the public-capacity figure.
+  const totalPlacesIncludingDiscount = activeBookings.reduce((s, b) => s + b.total_people, 0)
+
+  const passportStats = activeBookings.reduce(
+    (acc, b) => {
+      const pax = b.passengers ?? []
+      acc.total += pax.length
+      acc.uploaded += pax.filter(p => p.passport_photo_uploaded_at).length
+      return acc
+    },
+    { total: 0, uploaded: 0 }
   )
 
   return (
@@ -101,11 +117,17 @@ export default async function AdminDashboard() {
         <p className="text-stone-500 text-sm mt-1">Umrah 2026 bookings overview</p>
       </section>
 
-      <section className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
+      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4">
         <Stat label="Places taken" value={`${taken} / ${TOTAL_PLACES}`} tone="stone" />
+        <Stat label="Total places (incl. discount)" value={`${totalPlacesIncludingDiscount}`} tone="stone" />
         <Stat label="Remaining" value={`${remaining}`} tone="gold" />
         <Stat label="Claims to review" value={`${counts.claims}`} tone={counts.claims > 0 ? 'blue' : 'stone'} />
         <Stat label="Awaiting admin action" value={`${counts.awaiting}`} tone={counts.awaiting > 0 ? 'blue' : 'stone'} />
+        <Stat
+          label="Passports uploaded"
+          value={`${passportStats.uploaded} / ${passportStats.total}`}
+          tone={passportStats.uploaded < passportStats.total ? 'amber' : 'green'}
+        />
         <Stat label="Waiting list" value={`${waiting.reduce((s, w) => s + w.people_requested, 0)}`} tone="stone" />
       </section>
 

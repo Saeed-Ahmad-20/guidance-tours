@@ -74,6 +74,13 @@ export function totalDepositGBP(rooms: RoomSelection): number {
   return totalPeople(rooms) * DEPOSIT_PER_PERSON_GBP
 }
 
+// A promo code can bring the package total below the standard per-person
+// deposit (e.g. ADMIN2026), in which case there's nothing sensible to leave
+// as a "balance" — the amount due upfront is the total, not the deposit.
+export function effectiveDepositGBP(totalCostGBP: number, depositAmountGBP: number): number {
+  return Math.min(depositAmountGBP, totalCostGBP)
+}
+
 export function passportNeedsRenewal(expiryISO: string): boolean {
   return expiryISO < PASSPORT_VALIDITY_CUTOFF
 }
