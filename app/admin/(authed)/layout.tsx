@@ -28,6 +28,9 @@ export default async function AdminAuthedLayout({
               <Link href="/admin" className="text-stone-300 hover:text-white transition">
                 Dashboard
               </Link>
+              <Link href="/admin/rooms" className="text-stone-300 hover:text-white transition">
+                Room allocations
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-3">

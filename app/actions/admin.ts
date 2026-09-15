@@ -17,7 +17,10 @@ import {
 } from '../lib/admin-session'
 import {
   BOOKING_TTL_HOURS,
+  ROOM_CAPACITY,
   ROOM_PRICE_GBP,
+  RoomType,
+  cap,
   isValidDateOfBirth,
   isValidEmail,
   passportNeedsRenewal,
@@ -537,5 +540,294 @@ export async function removeWaitingListEntry(id: string): Promise<AdminActionRes
   }
 
   revalidatePath('/admin')
+  return { ok: true }
+}
+
+// --- Room allocations -------------------------------------------------
+// A physical room a passenger's bed is assigned to. Separate from
+// room_type/room_index on reservation_passengers, which only describe the
+// bed the customer booked — not which real room it ends up in, since beds
+// of the same type from different bookings can share a room.
+
+function isRoomType(v: unknown): v is RoomType {
+  return v === 'quad' || v === 'triple' || v === 'double'
+}
+
+export type RoomActionResult = { ok: true; id: string } | { ok: false; error: string }
+
+export async function createRoomAllocation(
+  tourId: string,
+  roomType: RoomType,
+  label: string
+): Promise<RoomActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+  if (!isRoomType(roomType)) return { ok: false, error: 'Invalid room type.' }
+
+  const trimmed = label.trim()
+  if (!trimmed) return { ok: false, error: 'Room name is required.' }
+  if (trimmed.length > 60) return { ok: false, error: 'Room name must be 60 characters or fewer.' }
+
+  const db = supabaseAdmin()
+  const { data, error } = await db
+    .from('room_allocations')
+    .insert({ tour_id: tourId, room_type: roomType, label: trimmed })
+    .select('id')
+    .single()
+
+  if (error || !data) {
+    console.error('createRoomAllocation error:', error?.message)
+    return { ok: false, error: 'Could not create room.' }
+  }
+
+  revalidatePath('/admin/rooms')
+  return { ok: true, id: (data as { id: string }).id }
+}
+
+export async function renameRoomAllocation(
+  roomAllocationId: string,
+  label: string
+): Promise<AdminActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const trimmed = label.trim()
+  if (!trimmed) return { ok: false, error: 'Room name is required.' }
+  if (trimmed.length > 60) return { ok: false, error: 'Room name must be 60 characters or fewer.' }
+
+  const db = supabaseAdmin()
+  const { error } = await db
+    .from('room_allocations')
+    .update({ label: trimmed })
+    .eq('id', roomAllocationId)
+
+  if (error) {
+    console.error('renameRoomAllocation error:', error.message)
+    return { ok: false, error: 'Could not rename room.' }
+  }
+
+  revalidatePath('/admin/rooms')
+  return { ok: true }
+}
+
+export async function deleteRoomAllocation(roomAllocationId: string): Promise<AdminActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const db = supabaseAdmin()
+  // Members are unassigned automatically (room_allocation_id references this
+  // table with ON DELETE SET NULL) rather than blocked from deletion here.
+  const { error } = await db.from('room_allocations').delete().eq('id', roomAllocationId)
+  if (error) {
+    console.error('deleteRoomAllocation error:', error.message)
+    return { ok: false, error: 'Could not delete room.' }
+  }
+
+  revalidatePath('/admin/rooms')
+  return { ok: true }
+}
+
+export async function assignPassengerToRoom(
+  passengerId: string,
+  roomAllocationId: string | null
+): Promise<AdminActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const db = supabaseAdmin()
+
+  const { data: passenger, error: pErr } = await db
+    .from('reservation_passengers')
+    .select('id, room_type')
+    .eq('id', passengerId)
+    .maybeSingle()
+  if (pErr || !passenger) return { ok: false, error: 'Passenger not found.' }
+  const passengerRoomType = (passenger as { room_type: RoomType }).room_type
+
+  if (roomAllocationId) {
+    const { data: room, error: rErr } = await db
+      .from('room_allocations')
+      .select('id, room_type')
+      .eq('id', roomAllocationId)
+      .maybeSingle()
+    if (rErr || !room) return { ok: false, error: 'Room not found.' }
+    if ((room as { room_type: string }).room_type !== passengerRoomType) {
+      return { ok: false, error: 'That room is a different bed type.' }
+    }
+
+    const { count, error: cErr } = await db
+      .from('reservation_passengers')
+      .select('id', { count: 'exact', head: true })
+      .eq('room_allocation_id', roomAllocationId)
+      .neq('id', passengerId)
+    if (cErr) return { ok: false, error: 'Could not check room capacity.' }
+    if ((count ?? 0) >= ROOM_CAPACITY[passengerRoomType]) {
+      return { ok: false, error: 'That room is already full.' }
+    }
+  }
+
+  const { error } = await db
+    .from('reservation_passengers')
+    .update({ room_allocation_id: roomAllocationId })
+    .eq('id', passengerId)
+
+  if (error) {
+    console.error('assignPassengerToRoom error:', error.message)
+    return { ok: false, error: 'Could not assign passenger.' }
+  }
+
+  revalidatePath('/admin/rooms')
+  return { ok: true }
+}
+
+const ROOM_TYPES: RoomType[] = ['quad', 'triple', 'double']
+
+// Redistributes every passenger into rooms across every bed type for the
+// tour in one go — clearing any existing assignments first, so this can be
+// re-run as many times as needed for a fresh suggestion (e.g. after manual
+// tweaks the admin wants to discard) rather than only ever filling gaps.
+// It fills existing rooms' spare capacity before creating new ones, and
+// keeps each booking's own passengers together in one room where they fit —
+// splitting only when a single booking has more beds of one type than one
+// room holds. A passenger can only ever join a room of the bed type they
+// booked, so this still runs the bin-packing separately per type under the
+// hood — it's just no longer something the admin has to trigger three times.
+// It's a starting point the admin can then hand-rearrange, not a final answer.
+export async function autoAllocateRooms(tourId: string): Promise<AdminActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const db = supabaseAdmin()
+
+  for (const roomType of ROOM_TYPES) {
+    const result = await autoAllocateRoomType(db, tourId, roomType)
+    if (!result.ok) return result
+  }
+
+  revalidatePath('/admin/rooms')
+  return { ok: true }
+}
+
+async function autoAllocateRoomType(
+  db: ReturnType<typeof supabaseAdmin>,
+  tourId: string,
+  roomType: RoomType
+): Promise<AdminActionResult> {
+  const capacity = ROOM_CAPACITY[roomType]
+
+  const { data: reservations, error: resErr } = await db
+    .from('reservations')
+    .select('id')
+    .eq('tour_id', tourId)
+    .in('status', ['pending_payment', 'transfer_submitted', 'confirmed'])
+    .order('created_at', { ascending: true })
+  if (resErr) return { ok: false, error: 'Could not load bookings.' }
+  const reservationIds = ((reservations ?? []) as Array<{ id: string }>).map(r => r.id)
+  if (reservationIds.length === 0) return { ok: true }
+
+  const { data: existingRooms, error: roomsErr } = await db
+    .from('room_allocations')
+    .select('id')
+    .eq('tour_id', tourId)
+    .eq('room_type', roomType)
+  if (roomsErr) return { ok: false, error: 'Could not load rooms.' }
+
+  const { data: passengers, error: paxErr } = await db
+    .from('reservation_passengers')
+    .select('id, reservation_id')
+    .in('reservation_id', reservationIds)
+    .eq('room_type', roomType)
+    .order('position', { ascending: true })
+  if (paxErr) return { ok: false, error: 'Could not load passengers.' }
+
+  const paxRows = (passengers ?? []) as Array<{ id: string; reservation_id: string }>
+  if (paxRows.length === 0) return { ok: true }
+
+  // Clear existing assignments so this redistributes everyone from scratch
+  // every time it runs, rather than only ever filling gaps left by people
+  // who were never assigned.
+  const { error: resetErr } = await db
+    .from('reservation_passengers')
+    .update({ room_allocation_id: null })
+    .in(
+      'id',
+      paxRows.map(p => p.id)
+    )
+  if (resetErr) return { ok: false, error: 'Could not reset existing assignments.' }
+
+  const bins: Array<{ id: string; remaining: number }> = ((existingRooms ?? []) as Array<{ id: string }>).map(
+    r => ({ id: r.id, remaining: capacity })
+  )
+
+  // Group by reservation, but walk reservations in booking order (the same
+  // order reservationIds was fetched in) rather than whatever order the
+  // passenger rows happened to come back in — position is only meaningful
+  // within a single booking, so ordering the passenger query by it does not
+  // keep one booking's people contiguous across the whole result set.
+  const paxByReservation = new Map<string, string[]>()
+  for (const p of paxRows) {
+    const list = paxByReservation.get(p.reservation_id) ?? []
+    list.push(p.id)
+    paxByReservation.set(p.reservation_id, list)
+  }
+
+  let roomCounter = (existingRooms ?? []).length + 1
+  const plannedAssignments: Array<{ passengerId: string; roomId: string }> = []
+
+  for (const reservationId of reservationIds) {
+    const passengerIds = paxByReservation.get(reservationId)
+    if (!passengerIds || passengerIds.length === 0) continue
+
+    let remaining = passengerIds
+    while (remaining.length > 0) {
+      // Prefer a room that can take everyone still left in this booking in
+      // one go — the tightest such fit — over the first room with any free
+      // bed, so a booking only ever gets split across rooms when it
+      // genuinely has more beds of this type than a single room holds.
+      const wholeFit = bins
+        .filter(b => b.remaining >= remaining.length)
+        .sort((a, b) => a.remaining - b.remaining)[0]
+      let bin = wholeFit
+      if (!bin) {
+        const label = `${cap(roomType)} Room ${roomCounter++}`
+        const { data: created, error: createErr } = await db
+          .from('room_allocations')
+          .insert({ tour_id: tourId, room_type: roomType, label })
+          .select('id')
+          .single()
+        if (createErr || !created) return { ok: false, error: 'Could not create room during auto-allocation.' }
+        bin = { id: (created as { id: string }).id, remaining: capacity }
+        bins.push(bin)
+      }
+      const take = remaining.slice(0, bin.remaining)
+      for (const passengerId of take) plannedAssignments.push({ passengerId, roomId: bin.id })
+      bin.remaining -= take.length
+      remaining = remaining.slice(take.length)
+    }
+  }
+
+  const byRoom = new Map<string, string[]>()
+  for (const a of plannedAssignments) {
+    const list = byRoom.get(a.roomId) ?? []
+    list.push(a.passengerId)
+    byRoom.set(a.roomId, list)
+  }
+
+  for (const [roomId, passengerIds] of byRoom) {
+    const { error } = await db
+      .from('reservation_passengers')
+      .update({ room_allocation_id: roomId })
+      .in('id', passengerIds)
+    if (error) {
+      console.error('autoAllocateRooms assign error:', error.message)
+      return { ok: false, error: 'Could not assign some passengers.' }
+    }
+  }
+
   return { ok: true }
 }

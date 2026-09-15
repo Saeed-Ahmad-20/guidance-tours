@@ -109,6 +109,16 @@ export function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+// Tours only have a slug in the database (e.g. "umrah-2026") — this turns
+// that into a display label ("Umrah 2026") without needing a separate name
+// column.
+export function formatTourLabel(slug: string): string {
+  return slug
+    .split('-')
+    .map(part => (/^\d+$/.test(part) ? part : cap(part)))
+    .join(' ')
+}
+
 // One entry per bed booked. room_index is the zero-based position of that bed
 // among all beds of the same type within this booking, which is all we use it
 // for (it no longer denotes a physical room assignment, since beds of the same

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { supabaseAdmin } from '../../lib/supabase-admin'
-import { effectiveDepositGBP, TOTAL_PLACES, TOUR_SLUG } from '../../lib/booking'
+import { effectiveDepositGBP, formatTourLabel } from '../../lib/booking'
 import BookingsList, {
   type BookingPassenger,
   type BookingRow,
@@ -19,21 +19,37 @@ type WaitingRow = {
   created_at: string
 }
 
-async function loadDashboard() {
+type TourGroup = {
+  tour: {
+    id: string
+    slug: string
+    label: string
+    totalPlaces: number
+    departureDate: string | null
+  }
+  taken: number
+  bookings: BookingRow[]
+  waiting: WaitingRow[]
+}
+
+async function loadDashboard(): Promise<TourGroup[]> {
   const db = supabaseAdmin()
   await db.rpc('expire_old_reservations')
 
-  const [{ data: places }, bookings, waiting, passengers] = await Promise.all([
-    db.rpc('get_places_taken', { p_tour_slug: TOUR_SLUG }),
+  const [{ data: tours }, bookings, waiting, passengers] = await Promise.all([
+    db
+      .from('tours')
+      .select('id, slug, total_places, departure_date')
+      .order('departure_date', { ascending: false }),
     db
       .from('reservations')
       .select(
-        'id, reservation_code, lead_given_names, lead_surname, lead_email, lead_phone, total_people, total_cost_gbp, deposit_amount_gbp, amount_received_gbp, last_claimed_amount_gbp, last_claimed_at, quad_rooms, triple_rooms, double_rooms, status, created_at, expires_at, transfer_submitted_at, confirmed_at'
+        'id, tour_id, reservation_code, lead_given_names, lead_surname, lead_email, lead_phone, total_people, total_cost_gbp, deposit_amount_gbp, amount_received_gbp, last_claimed_amount_gbp, last_claimed_at, quad_rooms, triple_rooms, double_rooms, status, created_at, expires_at, transfer_submitted_at, confirmed_at'
       )
       .order('created_at', { ascending: false }),
     db
       .from('waiting_list')
-      .select('id, name, email, phone, people_requested, created_at')
+      .select('id, tour_id, name, email, phone, people_requested, created_at')
       .order('created_at', { ascending: true }),
     db
       .from('reservation_passengers')
@@ -52,21 +68,64 @@ async function loadDashboard() {
     passengersByReservation.set(row.reservation_id, list)
   }
 
-  const bookingsWithPassengers = ((bookings.data ?? []) as BookingRow[]).map(b => ({
+  const allBookings = ((bookings.data ?? []) as Array<BookingRow & { tour_id: string }>).map(b => ({
     ...b,
     passengers: passengersByReservation.get(b.id) ?? [],
   }))
+  const allWaiting = (waiting.data ?? []) as Array<WaitingRow & { tour_id: string }>
+  const tourRows = (tours ?? []) as Array<{
+    id: string
+    slug: string
+    total_places: number
+    departure_date: string | null
+  }>
 
-  return {
-    taken: Number(places ?? 0),
-    bookings: bookingsWithPassengers,
-    waiting: (waiting.data ?? []) as WaitingRow[],
-  }
+  const placesTaken = await Promise.all(
+    tourRows.map(t => db.rpc('get_places_taken', { p_tour_slug: t.slug }))
+  )
+
+  return tourRows.map((t, i) => ({
+    tour: {
+      id: t.id,
+      slug: t.slug,
+      label: formatTourLabel(t.slug),
+      totalPlaces: t.total_places,
+      departureDate: t.departure_date,
+    },
+    taken: Number(placesTaken[i].data ?? 0),
+    bookings: allBookings.filter(b => b.tour_id === t.id),
+    waiting: allWaiting.filter(w => w.tour_id === t.id),
+  }))
 }
 
 export default async function AdminDashboard() {
-  const { taken, bookings, waiting } = await loadDashboard()
-  const remaining = Math.max(0, TOTAL_PLACES - taken)
+  const groups = await loadDashboard()
+
+  return (
+    <div className="flex flex-col gap-10">
+      <section>
+        <h1 className="text-2xl sm:text-3xl font-bold text-stone-900">Dashboard</h1>
+        <p className="text-stone-500 text-sm mt-1">Bookings overview, by tour</p>
+      </section>
+
+      {groups.length === 0 ? (
+        <p className="text-sm text-stone-500 bg-white rounded-xl border border-stone-200 p-5">
+          No tours found.
+        </p>
+      ) : (
+        groups.map(group => <TourSection key={group.tour.id} group={group} />)
+      )}
+
+      <p className="text-xs text-stone-400 text-center mt-4">
+        <Link href="/" className="hover:text-[#C4A348]">← Public site</Link>
+      </p>
+    </div>
+  )
+}
+
+function TourSection({ group }: { group: TourGroup }) {
+  const { tour, taken, bookings, waiting } = group
+  const remaining = Math.max(0, tour.totalPlaces - taken)
 
   const counts = {
     pending: bookings.filter(b => b.status === 'pending_payment').length,
@@ -111,14 +170,24 @@ export default async function AdminDashboard() {
   )
 
   return (
-    <div className="flex flex-col gap-8">
-      <section>
-        <h1 className="text-2xl sm:text-3xl font-bold text-stone-900">Dashboard</h1>
-        <p className="text-stone-500 text-sm mt-1">Umrah 2026 bookings overview</p>
-      </section>
+    <section className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-stone-200 pb-3">
+        <div>
+          <h2 className="text-xl font-bold text-stone-900">{tour.label}</h2>
+          {tour.departureDate && (
+            <p className="text-xs text-stone-500 mt-0.5">Departs {formatDate(tour.departureDate)}</p>
+          )}
+        </div>
+        <Link
+          href={`/admin/rooms/${tour.id}`}
+          className="text-xs font-semibold bg-stone-900 text-white rounded-full px-4 py-2 hover:bg-stone-800 transition"
+        >
+          Room allocations →
+        </Link>
+      </div>
 
-      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4">
-        <Stat label="Places taken" value={`${taken} / ${TOTAL_PLACES}`} tone="stone" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4">
+        <Stat label="Places taken" value={`${taken} / ${tour.totalPlaces}`} tone="stone" />
         <Stat label="Total places (incl. discount)" value={`${totalPlacesIncludingDiscount}`} tone="stone" />
         <Stat label="Remaining" value={`${remaining}`} tone="gold" />
         <Stat label="Claims to review" value={`${counts.claims}`} tone={counts.claims > 0 ? 'blue' : 'stone'} />
@@ -129,31 +198,25 @@ export default async function AdminDashboard() {
           tone={passportStats.uploaded < passportStats.total ? 'amber' : 'green'}
         />
         <Stat label="Waiting list" value={`${waiting.reduce((s, w) => s + w.people_requested, 0)}`} tone="stone" />
-      </section>
+      </div>
 
-      <section>
-        <PaymentStatsToggle
-          depositsReceived={depositsReceived}
-          depositsOutstanding={depositsOutstanding}
-          totalReceived={totalReceived}
-          totalOutstanding={totalOutstanding}
-        />
-      </section>
+      <PaymentStatsToggle
+        depositsReceived={depositsReceived}
+        depositsOutstanding={depositsOutstanding}
+        totalReceived={totalReceived}
+        totalOutstanding={totalOutstanding}
+      />
 
-      <section>
-        <h2 className="text-lg font-semibold text-stone-900 mb-3">Bookings</h2>
+      <div>
+        <h3 className="text-lg font-semibold text-stone-900 mb-3">Bookings</h3>
         <BookingsList bookings={bookings} counts={counts} />
-      </section>
+      </div>
 
-      <section>
-        <h2 className="text-lg font-semibold text-stone-900 mb-3">Waiting list</h2>
+      <div>
+        <h3 className="text-lg font-semibold text-stone-900 mb-3">Waiting list</h3>
         <WaitingListManager initial={waiting} />
-      </section>
-
-      <p className="text-xs text-stone-400 text-center mt-4">
-        <Link href="/" className="hover:text-[#C4A348]">← Public site</Link>
-      </p>
-    </div>
+      </div>
+    </section>
   )
 }
 
@@ -181,3 +244,10 @@ function Stat({
   )
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
