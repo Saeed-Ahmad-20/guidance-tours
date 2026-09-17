@@ -31,11 +31,9 @@ export default async function RoomAllocationsPage({
         </div>
         <Link
           href={`/admin/rooms/${tourId}/print`}
-          target="_blank"
-          rel="noopener noreferrer"
           className="text-xs font-semibold bg-white border border-stone-300 text-stone-700 rounded-full px-4 py-2 hover:border-stone-400 transition shrink-0"
         >
-          Print / save as PDF
+          Download room list (.txt)
         </Link>
       </div>
 

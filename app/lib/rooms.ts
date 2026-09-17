@@ -1,5 +1,5 @@
 import { supabaseAdmin } from './supabase-admin'
-import { ROOM_CAPACITY, RoomType, formatTourLabel } from './booking'
+import { ROOM_CAPACITY, RoomType, cap, formatTourLabel } from './booking'
 
 export const ROOM_TYPES: RoomType[] = ['quad', 'triple', 'double']
 export const ACTIVE_STATUSES = ['pending_payment', 'transfer_submitted', 'confirmed']
@@ -120,4 +120,48 @@ export async function loadRoomsData(tourId: string): Promise<RoomsData | null> {
     tour: { id: (tour as { id: string; slug: string }).id, label: formatTourLabel((tour as { slug: string }).slug) },
     byType,
   }
+}
+
+function personLabel(p: PassengerCard): string {
+  return p.personType === 'infant' ? `${p.name} (infant)` : p.name
+}
+
+// Plain-text room list for the admin to download and print — deliberately
+// simple (no HTML/PDF rendering) so it opens and prints cleanly from any
+// device.
+export function buildRoomAllocationsText(data: RoomsData): string {
+  const lines: string[] = []
+  lines.push(`Room allocations — ${data.tour.label}`)
+  lines.push(
+    `Generated ${new Date().toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`
+  )
+  lines.push('')
+
+  for (const type of ROOM_TYPES) {
+    const section = data.byType[type]
+
+    for (const room of section.rooms) {
+      lines.push(room.label)
+      lines.push(`Names: ${room.members.length ? room.members.map(personLabel).join(', ') : '(empty)'}`)
+      lines.push(`Room Type: ${cap(type)}`)
+      if (room.members.length > room.capacity) {
+        lines.push(`Warning: over capacity (${room.members.length}/${room.capacity})`)
+      }
+      lines.push('')
+    }
+
+    if (section.unassigned.length > 0) {
+      lines.push(`Unassigned (${cap(type)})`)
+      lines.push(`Names: ${section.unassigned.map(personLabel).join(', ')}`)
+      lines.push('')
+    }
+  }
+
+  return lines.join('\n').trimEnd() + '\n'
 }
