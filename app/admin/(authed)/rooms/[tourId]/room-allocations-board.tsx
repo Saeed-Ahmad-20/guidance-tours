@@ -11,23 +11,11 @@ import {
   renameRoomAllocation,
 } from '../../../../actions/admin'
 import { ROOM_CAPACITY, cap, RoomType } from '../../../../lib/booking'
+import type { PassengerCard, RoomCard, RoomsByType } from '../../../../lib/rooms'
 
-export type PassengerCard = {
-  id: string
-  name: string
-  personType: 'adult' | 'infant'
-  reservationCode: string
-  leadName: string
-}
+export type { PassengerCard, RoomCard }
 
-export type RoomCard = {
-  id: string
-  label: string
-  capacity: number
-  members: PassengerCard[]
-}
-
-type ByType = Record<RoomType, { rooms: RoomCard[]; unassigned: PassengerCard[] }>
+type ByType = RoomsByType
 
 const ROOM_TYPES: RoomType[] = ['quad', 'triple', 'double']
 const UNASSIGNED = '__unassigned__'
@@ -115,6 +103,7 @@ function RoomTypeSection({
   const [isPending, startTransition] = useTransition()
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
   const [newRoomLabel, setNewRoomLabel] = useState('')
   const [showNewRoom, setShowNewRoom] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -122,14 +111,22 @@ function RoomTypeSection({
 
   const capacity = ROOM_CAPACITY[roomType]
 
-  function run(id: string, fn: () => Promise<{ ok: boolean; error?: string }>) {
+  function run(
+    id: string,
+    fn: () => Promise<{ ok: boolean; error?: string; warning?: string }>
+  ) {
     setBusyAction(id)
     setError(null)
+    setWarning(null)
     startTransition(async () => {
       const r = await fn()
       setBusyAction(null)
-      if (r.ok) router.refresh()
-      else setError(r.error ?? 'Something went wrong.')
+      if (r.ok) {
+        if (r.warning) setWarning(r.warning)
+        router.refresh()
+      } else {
+        setError(r.error ?? 'Something went wrong.')
+      }
     })
   }
 
@@ -178,15 +175,10 @@ function RoomTypeSection({
     setDragOverTarget(null)
   }
 
-  function canDropOn(room: RoomCard): boolean {
-    if (!draggingId) return true
-    const alreadyHere = room.members.some(m => m.id === draggingId)
-    return alreadyHere || room.members.length < room.capacity
-  }
-
   function handleDragOverRoom(room: RoomCard) {
     return (e: DragEvent<HTMLDivElement>) => {
-      if (!canDropOn(room)) return
+      // Rooms are allowed to exceed their bed capacity (assignPassengerToRoom
+      // returns a warning rather than blocking), so any room can accept a drop.
       e.preventDefault()
       e.dataTransfer.dropEffect = 'move'
       setDragOverTarget(room.id)
@@ -242,6 +234,11 @@ function RoomTypeSection({
 
       {error && (
         <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>
+      )}
+      {warning && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+          {warning}
+        </div>
       )}
 
       {showNewRoom && (
@@ -302,41 +299,39 @@ function RoomTypeSection({
             Unassigned ({data.unassigned.length}) — drag here to remove from a room
           </h3>
           <ul className="bg-white rounded-xl border border-stone-200 divide-y divide-stone-100">
-            {data.unassigned.map(p => {
-              const openRooms = data.rooms.filter(r => r.members.length < r.capacity)
-              return (
-                <li
-                  key={p.id}
-                  draggable
-                  onDragStart={handleDragStart(p.id)}
-                  onDragEnd={handleDragEnd}
-                  className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm cursor-grab active:cursor-grabbing ${
-                    draggingId === p.id ? 'opacity-40' : ''
-                  }`}
+            {data.unassigned.map(p => (
+              <li
+                key={p.id}
+                draggable
+                onDragStart={handleDragStart(p.id)}
+                onDragEnd={handleDragEnd}
+                className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm cursor-grab active:cursor-grabbing ${
+                  draggingId === p.id ? 'opacity-40' : ''
+                }`}
+              >
+                <span className="text-stone-900">
+                  {p.name}
+                  {p.personType === 'infant' && <span className="ml-1 text-xs text-stone-500">(infant)</span>}
+                  <span className="ml-2 text-xs text-stone-400 font-mono">{p.reservationCode}</span>
+                </span>
+                <select
+                  defaultValue=""
+                  disabled={isPending || data.rooms.length === 0}
+                  onChange={e => e.target.value && onAssign(p.id, e.target.value)}
+                  className="text-xs rounded-lg border border-stone-200 bg-white px-2 py-1.5 focus:outline-none disabled:opacity-50"
                 >
-                  <span className="text-stone-900">
-                    {p.name}
-                    {p.personType === 'infant' && <span className="ml-1 text-xs text-stone-500">(infant)</span>}
-                    <span className="ml-2 text-xs text-stone-400 font-mono">{p.reservationCode}</span>
-                  </span>
-                  <select
-                    defaultValue=""
-                    disabled={isPending || openRooms.length === 0}
-                    onChange={e => e.target.value && onAssign(p.id, e.target.value)}
-                    className="text-xs rounded-lg border border-stone-200 bg-white px-2 py-1.5 focus:outline-none disabled:opacity-50"
-                  >
-                    <option value="" disabled>
-                      {openRooms.length === 0 ? 'No rooms with space' : 'Assign to room…'}
+                  <option value="" disabled>
+                    {data.rooms.length === 0 ? 'No rooms yet' : 'Assign to room…'}
+                  </option>
+                  {data.rooms.map(r => (
+                    <option key={r.id} value={r.id}>
+                      {r.label} ({r.members.length}/{r.capacity}
+                      {r.members.length >= r.capacity ? ' — full' : ''})
                     </option>
-                    {openRooms.map(r => (
-                      <option key={r.id} value={r.id}>
-                        {r.label} ({r.members.length}/{r.capacity})
-                      </option>
-                    ))}
-                  </select>
-                </li>
-              )
-            })}
+                  ))}
+                </select>
+              </li>
+            ))}
           </ul>
         </div>
       )}
@@ -376,6 +371,7 @@ function RoomCardView({
   const [editing, setEditing] = useState(false)
   const [label, setLabel] = useState(room.label)
   const full = room.members.length >= room.capacity
+  const overCapacity = room.members.length > room.capacity
 
   function save() {
     const trimmed = label.trim()
@@ -426,10 +422,15 @@ function RoomCardView({
         </div>
         <span
           className={`text-xs font-semibold rounded-full px-2 py-0.5 shrink-0 ${
-            full ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-600'
+            overCapacity
+              ? 'bg-red-100 text-red-800'
+              : full
+              ? 'bg-emerald-100 text-emerald-800'
+              : 'bg-stone-100 text-stone-600'
           }`}
         >
           {room.members.length}/{room.capacity}
+          {overCapacity ? ' over' : ''}
         </span>
       </div>
 

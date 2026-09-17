@@ -20,7 +20,6 @@ import {
   ROOM_CAPACITY,
   ROOM_PRICE_GBP,
   RoomType,
-  cap,
   isValidDateOfBirth,
   isValidEmail,
   passportNeedsRenewal,
@@ -630,10 +629,12 @@ export async function deleteRoomAllocation(roomAllocationId: string): Promise<Ad
   return { ok: true }
 }
 
+export type AssignRoomResult = { ok: true; warning?: string } | { ok: false; error: string }
+
 export async function assignPassengerToRoom(
   passengerId: string,
   roomAllocationId: string | null
-): Promise<AdminActionResult> {
+): Promise<AssignRoomResult> {
   await assertSameOrigin()
   const admin = await requireAdmin().catch(() => null)
   if (!admin) return { ok: false, error: 'Not authorised.' }
@@ -648,10 +649,11 @@ export async function assignPassengerToRoom(
   if (pErr || !passenger) return { ok: false, error: 'Passenger not found.' }
   const passengerRoomType = (passenger as { room_type: RoomType }).room_type
 
+  let warning: string | undefined
   if (roomAllocationId) {
     const { data: room, error: rErr } = await db
       .from('room_allocations')
-      .select('id, room_type')
+      .select('id, room_type, label')
       .eq('id', roomAllocationId)
       .maybeSingle()
     if (rErr || !room) return { ok: false, error: 'Room not found.' }
@@ -665,8 +667,12 @@ export async function assignPassengerToRoom(
       .eq('room_allocation_id', roomAllocationId)
       .neq('id', passengerId)
     if (cErr) return { ok: false, error: 'Could not check room capacity.' }
+    // Rooms are allowed to exceed their bed capacity — this is only ever a
+    // warning to the admin, never a block, since real-world overflow (e.g. a
+    // last-minute extra bed) is a call for the admin to make, not the system.
     if ((count ?? 0) >= ROOM_CAPACITY[passengerRoomType]) {
-      return { ok: false, error: 'That room is already full.' }
+      const label = (room as { label: string }).label
+      warning = `${label} now has more people than its ${ROOM_CAPACITY[passengerRoomType]}-bed capacity.`
     }
   }
 
@@ -681,7 +687,7 @@ export async function assignPassengerToRoom(
   }
 
   revalidatePath('/admin/rooms')
-  return { ok: true }
+  return warning ? { ok: true, warning } : { ok: true }
 }
 
 const ROOM_TYPES: RoomType[] = ['quad', 'triple', 'double']
@@ -722,13 +728,21 @@ async function autoAllocateRoomType(
 
   const { data: reservations, error: resErr } = await db
     .from('reservations')
-    .select('id')
+    .select('id, lead_given_names, lead_surname')
     .eq('tour_id', tourId)
     .in('status', ['pending_payment', 'transfer_submitted', 'confirmed'])
     .order('created_at', { ascending: true })
   if (resErr) return { ok: false, error: 'Could not load bookings.' }
-  const reservationIds = ((reservations ?? []) as Array<{ id: string }>).map(r => r.id)
+  const reservationRows = (reservations ?? []) as Array<{
+    id: string
+    lead_given_names: string
+    lead_surname: string
+  }>
+  const reservationIds = reservationRows.map(r => r.id)
   if (reservationIds.length === 0) return { ok: true }
+  const leadNameByReservation = new Map(
+    reservationRows.map(r => [r.id, `${r.lead_given_names} ${r.lead_surname}`.trim()])
+  )
 
   const { data: existingRooms, error: roomsErr } = await db
     .from('room_allocations')
@@ -776,12 +790,17 @@ async function autoAllocateRoomType(
     paxByReservation.set(p.reservation_id, list)
   }
 
-  let roomCounter = (existingRooms ?? []).length + 1
+  // Rooms created here are named after the lead passenger of the booking
+  // that triggered their creation, so the admin can see whose party is in
+  // which room at a glance. Numbering is added afterwards, only for a lead
+  // who ends up needing more than one room of this type.
+  const createdRoomLead = new Map<string, string>()
   const plannedAssignments: Array<{ passengerId: string; roomId: string }> = []
 
   for (const reservationId of reservationIds) {
     const passengerIds = paxByReservation.get(reservationId)
     if (!passengerIds || passengerIds.length === 0) continue
+    const leadName = leadNameByReservation.get(reservationId) || 'Guest'
 
     let remaining = passengerIds
     while (remaining.length > 0) {
@@ -794,20 +813,38 @@ async function autoAllocateRoomType(
         .sort((a, b) => a.remaining - b.remaining)[0]
       let bin = wholeFit
       if (!bin) {
-        const label = `${cap(roomType)} Room ${roomCounter++}`
         const { data: created, error: createErr } = await db
           .from('room_allocations')
-          .insert({ tour_id: tourId, room_type: roomType, label })
+          .insert({ tour_id: tourId, room_type: roomType, label: leadName })
           .select('id')
           .single()
         if (createErr || !created) return { ok: false, error: 'Could not create room during auto-allocation.' }
-        bin = { id: (created as { id: string }).id, remaining: capacity }
+        const roomId = (created as { id: string }).id
+        bin = { id: roomId, remaining: capacity }
         bins.push(bin)
+        createdRoomLead.set(roomId, leadName)
       }
       const take = remaining.slice(0, bin.remaining)
       for (const passengerId of take) plannedAssignments.push({ passengerId, roomId: bin.id })
       bin.remaining -= take.length
       remaining = remaining.slice(take.length)
+    }
+  }
+
+  const roomsByLead = new Map<string, string[]>()
+  for (const [roomId, leadName] of createdRoomLead) {
+    const list = roomsByLead.get(leadName) ?? []
+    list.push(roomId)
+    roomsByLead.set(leadName, list)
+  }
+  for (const [leadName, roomIds] of roomsByLead) {
+    if (roomIds.length <= 1) continue
+    for (let i = 0; i < roomIds.length; i++) {
+      const { error } = await db
+        .from('room_allocations')
+        .update({ label: `${leadName} ${i + 1}` })
+        .eq('id', roomIds[i])
+      if (error) console.error('autoAllocateRooms rename error:', error.message)
     }
   }
 
@@ -827,6 +864,16 @@ async function autoAllocateRoomType(
       console.error('autoAllocateRooms assign error:', error.message)
       return { ok: false, error: 'Could not assign some passengers.' }
     }
+  }
+
+  // A room left over from a previous run that nobody ended up in this time
+  // (e.g. its occupants cancelled or moved elsewhere) is no longer in use —
+  // delete it rather than leaving an empty shell behind. Rooms created above
+  // always have at least one member, so this only ever removes carry-overs.
+  const unusedRoomIds = bins.filter(b => !byRoom.has(b.id)).map(b => b.id)
+  if (unusedRoomIds.length > 0) {
+    const { error } = await db.from('room_allocations').delete().in('id', unusedRoomIds)
+    if (error) console.error('autoAllocateRooms cleanup error:', error.message)
   }
 
   return { ok: true }
