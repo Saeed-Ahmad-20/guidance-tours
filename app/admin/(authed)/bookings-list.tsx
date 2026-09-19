@@ -3,16 +3,30 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import * as React from 'react'
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { cancelBooking, confirmDeposit, revertToPending } from '../../actions/admin'
-import { effectiveDepositGBP, formatGBP } from '../../lib/booking'
+import { ageGroup, effectiveDepositGBP, formatGBP, type AgeGroup } from '../../lib/booking'
+
+const AGE_GROUP_LABEL: Record<AgeGroup, string> = {
+  infant: 'Infant',
+  youth: 'Youth',
+  adult: 'Adult',
+}
+
+const AGE_GROUP_CLS: Record<AgeGroup, string> = {
+  infant: 'bg-blue-100 text-blue-800',
+  youth: 'bg-purple-100 text-purple-800',
+  adult: 'bg-stone-100 text-stone-600',
+}
 
 export type BookingPassenger = {
+  id: string
   position: number
   given_names: string
   surname: string
   person_type: 'adult' | 'infant'
   room_type: 'quad' | 'triple' | 'double'
+  room_allocation_id: string | null
   date_of_birth: string
   passport_expiry: string
   passport_renewal_required: boolean
@@ -46,9 +60,45 @@ export type BookingRow = {
 type Tab = 'claims' | 'awaiting' | 'pending' | 'confirmed' | 'expired' | 'cancelled' | 'all'
 type PanelType = 'confirm' | 'revert' | 'cancel'
 
+// What's still owed for a confirm/top-up action on this booking — the
+// (promo-capped) deposit before confirmation, or the remaining balance after.
+// Can legitimately be 0 (a fully comped booking, or a prior transfer that
+// already covered it), in which case submitting 0 is how the admin confirms
+// it rather than an error.
+function remainingDue(b: BookingRow): number {
+  const target = b.status === 'confirmed' ? b.total_cost_gbp : effectiveDepositGBP(b.total_cost_gbp, b.deposit_amount_gbp)
+  return Math.max(0, target - b.amount_received_gbp)
+}
+
+type SortKey = 'code' | 'lead' | 'people' | 'received' | 'passports' | 'claimed' | 'created' | 'status'
+
+function sortValue(b: BookingRow, key: SortKey): string | number {
+  switch (key) {
+    case 'code':
+      return b.reservation_code
+    case 'lead':
+      return `${b.lead_given_names} ${b.lead_surname}`.toLowerCase()
+    case 'people':
+      return b.total_people
+    case 'received':
+      return b.amount_received_gbp
+    case 'passports': {
+      const pax = b.passengers ?? []
+      return pax.length ? pax.filter(p => p.passport_photo_uploaded_at).length / pax.length : -1
+    }
+    case 'claimed':
+      return b.last_claimed_amount_gbp ?? -1
+    case 'created':
+      return b.created_at
+    case 'status':
+      return b.status
+  }
+}
+
 export default function BookingsList({
   bookings,
   counts,
+  departureDate,
 }: {
   bookings: BookingRow[]
   counts: {
@@ -59,6 +109,7 @@ export default function BookingsList({
     cancelled: number
     claims: number
   }
+  departureDate: string | null
 }) {
   const [tab, setTab] = useState<Tab>(
     counts.claims > 0 ? 'claims' : counts.awaiting > 0 ? 'awaiting' : 'pending'
@@ -72,6 +123,13 @@ export default function BookingsList({
   const [amountStr, setAmountStr] = useState('')
   const [revertNote, setRevertNote] = useState('')
   const [cancelNote, setCancelNote] = useState('')
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'created', dir: 'desc' })
+
+  function toggleSort(key: SortKey) {
+    setSort(prev =>
+      prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
+    )
+  }
 
   function toggleExpand(id: string) {
     setExpanded(prev => {
@@ -85,11 +143,7 @@ export default function BookingsList({
   function openPanel(type: PanelType, booking: BookingRow) {
     setPanel({ id: booking.id, type, booking })
     if (type === 'confirm') {
-      const target =
-        booking.status === 'confirmed'
-          ? booking.total_cost_gbp
-          : effectiveDepositGBP(booking.total_cost_gbp, booking.deposit_amount_gbp)
-      const remaining = Math.max(0, target - booking.amount_received_gbp)
+      const remaining = remainingDue(booking)
       const prefill = booking.last_claimed_amount_gbp
         ? Math.min(booking.last_claimed_amount_gbp, remaining)
         : remaining
@@ -121,10 +175,25 @@ export default function BookingsList({
     return false
   })
 
+  const sorted = useMemo(() => {
+    const dirMul = sort.dir === 'asc' ? 1 : -1
+    return [...filtered].sort((a, b) => {
+      const av = sortValue(a, sort.key)
+      const bv = sortValue(b, sort.key)
+      if (av < bv) return -1 * dirMul
+      if (av > bv) return 1 * dirMul
+      return 0
+    })
+  }, [filtered, sort])
+
   function onConfirmDeposit() {
     if (!panel) return
     const amount = parseFloat(amountStr)
-    if (isNaN(amount) || amount <= 0) { setError('Enter a valid amount.'); return }
+    const nothingOwed = remainingDue(panel.booking) <= 0
+    if (isNaN(amount) || amount < 0 || (amount === 0 && !nothingOwed)) {
+      setError('Enter a valid amount.')
+      return
+    }
     const prevReceived = panel.booking.amount_received_gbp
     const totalAmount = prevReceived + amount
     setActionId(panel.id)
@@ -233,19 +302,19 @@ export default function BookingsList({
             <thead className="text-xs uppercase text-stone-500 bg-stone-50 border-b border-stone-200">
               <tr>
                 <Th className="w-8">{''}</Th>
-                <Th>Code</Th>
-                <Th>Lead</Th>
-                <Th>People</Th>
-                <Th>Deposit</Th>
-                <Th>Passports</Th>
-                <Th>Claimed</Th>
-                <Th>Created</Th>
-                <Th>Status</Th>
+                <SortTh sortKey="code" sort={sort} onSort={toggleSort}>Code</SortTh>
+                <SortTh sortKey="lead" sort={sort} onSort={toggleSort}>Lead</SortTh>
+                <SortTh sortKey="people" sort={sort} onSort={toggleSort}>People</SortTh>
+                <SortTh sortKey="received" sort={sort} onSort={toggleSort}>Amount received</SortTh>
+                <SortTh sortKey="passports" sort={sort} onSort={toggleSort}>Passports</SortTh>
+                <SortTh sortKey="claimed" sort={sort} onSort={toggleSort}>Claimed</SortTh>
+                <SortTh sortKey="created" sort={sort} onSort={toggleSort}>Created</SortTh>
+                <SortTh sortKey="status" sort={sort} onSort={toggleSort}>Status</SortTh>
                 <Th>Actions</Th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(b => {
+              {sorted.map(b => {
                 const isOpen = expanded.has(b.id)
                 const pax = b.passengers ?? []
                 const hasPax = pax.length > 0
@@ -311,21 +380,14 @@ export default function BookingsList({
                       </Td>
                       <Td>{b.total_people}</Td>
                       <Td className="font-semibold">
-                        {b.amount_received_gbp < rowEffectiveDeposit ? (
-                          <span>
-                            <span className="text-amber-700">{formatGBP(rowEffectiveDeposit - b.amount_received_gbp)} remaining</span>
-                            <span className="text-stone-400 font-normal text-xs ml-1">
-                              of {formatGBP(rowEffectiveDeposit)}{rowPayInFullOnly ? ' (full)' : ''}
+                        <div className="flex flex-col">
+                          <span>{formatGBP(b.amount_received_gbp)}</span>
+                          {balanceRemaining > 0 && (
+                            <span className="text-amber-700 font-normal text-xs mt-0.5">
+                              {formatGBP(balanceRemaining)} balance due
                             </span>
-                          </span>
-                        ) : b.status === 'confirmed' && balanceRemaining > 0 ? (
-                          <span>
-                            {formatGBP(rowEffectiveDeposit)}
-                            <span className="text-amber-700 font-normal text-xs ml-1">· {formatGBP(balanceRemaining)} balance due</span>
-                          </span>
-                        ) : (
-                          formatGBP(rowEffectiveDeposit)
-                        )}
+                          )}
+                        </div>
                       </Td>
                       <Td>
                         {hasPax ? (
@@ -400,7 +462,7 @@ export default function BookingsList({
                     {isOpen && hasPax && (
                       <tr className="bg-stone-50/60 border-b border-stone-100">
                         <td colSpan={10} className="px-4 py-3">
-                          <PassengerPanel passengers={pax} />
+                          <PassengerPanel passengers={pax} departureDate={departureDate} />
                         </td>
                       </tr>
                     )}
@@ -423,7 +485,7 @@ export default function BookingsList({
                               <span className="text-stone-500 text-sm">£</span>
                               <input
                                 type="number"
-                                min="0.01"
+                                min="0"
                                 step="0.01"
                                 value={amountStr}
                                 onChange={e => setAmountStr(e.target.value)}
@@ -545,7 +607,15 @@ export default function BookingsList({
   )
 }
 
-function PassengerPanel({ passengers }: { passengers: BookingPassenger[] }) {
+function PassengerPanel({
+  passengers,
+  departureDate,
+}: {
+  passengers: BookingPassenger[]
+  departureDate: string | null
+}) {
+  const referenceDate = departureDate ?? new Date().toISOString().slice(0, 10)
+
   return (
     <div className="rounded-lg border border-stone-200 bg-white overflow-hidden">
       <table className="min-w-full text-xs">
@@ -554,6 +624,7 @@ function PassengerPanel({ passengers }: { passengers: BookingPassenger[] }) {
             <th className="text-left px-3 py-2 font-semibold">#</th>
             <th className="text-left px-3 py-2 font-semibold">Name</th>
             <th className="text-left px-3 py-2 font-semibold">Type</th>
+            <th className="text-left px-3 py-2 font-semibold">Age group</th>
             <th className="text-left px-3 py-2 font-semibold">Bed</th>
             <th className="text-left px-3 py-2 font-semibold">DOB</th>
             <th className="text-left px-3 py-2 font-semibold">Passport expiry</th>
@@ -569,6 +640,18 @@ function PassengerPanel({ passengers }: { passengers: BookingPassenger[] }) {
                 {p.given_names} {p.surname}
               </td>
               <td className="px-3 py-2 capitalize text-stone-700">{p.person_type}</td>
+              <td className="px-3 py-2">
+                {(() => {
+                  const g = ageGroup(p.date_of_birth, referenceDate)
+                  return (
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 ${AGE_GROUP_CLS[g]}`}
+                    >
+                      {AGE_GROUP_LABEL[g]}
+                    </span>
+                  )
+                })()}
+              </td>
               <td className="px-3 py-2 capitalize text-stone-700">{p.room_type}-room bed</td>
               <td className="px-3 py-2 text-stone-700">{p.date_of_birth}</td>
               <td className="px-3 py-2 text-stone-700">{p.passport_expiry}</td>
@@ -637,6 +720,34 @@ function Th({
   className?: string
 }) {
   return <th className={`text-left px-4 py-2.5 font-semibold whitespace-nowrap ${className}`}>{children}</th>
+}
+
+function SortTh({
+  children,
+  sortKey,
+  sort,
+  onSort,
+  className = '',
+}: {
+  children: React.ReactNode
+  sortKey: SortKey
+  sort: { key: SortKey; dir: 'asc' | 'desc' }
+  onSort: (key: SortKey) => void
+  className?: string
+}) {
+  const active = sort.key === sortKey
+  return (
+    <th className={`text-left px-4 py-2.5 font-semibold whitespace-nowrap ${className}`}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1 hover:text-stone-900 transition ${active ? 'text-stone-900' : ''}`}
+      >
+        {children}
+        <span className="text-[10px] w-2.5 inline-block">{active ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
+      </button>
+    </th>
+  )
 }
 
 function Td({

@@ -31,6 +31,9 @@ export default async function AdminAuthedLayout({
               <Link href="/admin/rooms" className="text-stone-300 hover:text-white transition">
                 Room allocations
               </Link>
+              <Link href="/admin/finance" className="text-stone-300 hover:text-white transition">
+                Financial breakdown
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-3">

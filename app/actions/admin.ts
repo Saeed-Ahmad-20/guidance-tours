@@ -20,6 +20,7 @@ import {
   ROOM_CAPACITY,
   ROOM_PRICE_GBP,
   RoomType,
+  effectiveDepositGBP,
   isValidDateOfBirth,
   isValidEmail,
   passportNeedsRenewal,
@@ -131,12 +132,20 @@ export async function confirmDeposit(
     return { ok: false, error: `Cannot confirm a ${row.status} booking.` }
 
   const newTotal = Math.min(row.total_cost_gbp, Math.max(0, amountReceived))
-  if (newTotal <= row.amount_received_gbp) {
+  const wasConfirmed = row.status === 'confirmed'
+  // What's actually still owed for this step — the deposit (capped to the
+  // total, since a promo code can bring the total below the usual deposit)
+  // before confirmation, or the remaining balance after. When that's already
+  // zero (e.g. a fully comped booking, or a prior transfer already covered
+  // it), submitting 0 is a legitimate way to confirm — it isn't "no progress",
+  // there's simply nothing left to collect.
+  const target = wasConfirmed ? row.total_cost_gbp : effectiveDepositGBP(row.total_cost_gbp, row.deposit_amount_gbp)
+  const remaining = Math.max(0, target - row.amount_received_gbp)
+  if (newTotal <= row.amount_received_gbp && remaining > 0) {
     return { ok: false, error: 'Amount must be greater than the amount already received.' }
   }
 
-  const wasConfirmed = row.status === 'confirmed'
-  const isPartial = !wasConfirmed && newTotal < row.deposit_amount_gbp
+  const isPartial = !wasConfirmed && newTotal < target
 
   const partialExpiry = new Date(
     Date.now() + BOOKING_TTL_HOURS * 60 * 60 * 1000

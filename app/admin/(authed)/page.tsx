@@ -1,12 +1,13 @@
 import Link from 'next/link'
 import { supabaseAdmin } from '../../lib/supabase-admin'
-import { effectiveDepositGBP, formatTourLabel } from '../../lib/booking'
+import { ageGroup, effectiveDepositGBP, formatTourLabel } from '../../lib/booking'
 import BookingsList, {
   type BookingPassenger,
   type BookingRow,
 } from './bookings-list'
 import WaitingListManager from './waiting-list-manager'
 import PaymentStatsToggle from './payment-stats-toggle'
+import CustomerDirectory, { type CustomerRow } from './customer-directory'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,11 +33,17 @@ type TourGroup = {
   waiting: WaitingRow[]
 }
 
-async function loadDashboard(): Promise<TourGroup[]> {
+type Dashboard = {
+  groups: TourGroup[]
+  customers: CustomerRow[]
+  tours: { id: string; label: string }[]
+}
+
+async function loadDashboard(): Promise<Dashboard> {
   const db = supabaseAdmin()
   await db.rpc('expire_old_reservations')
 
-  const [{ data: tours }, bookings, waiting, passengers] = await Promise.all([
+  const [{ data: tours }, bookings, waiting, passengers, roomAllocations] = await Promise.all([
     db
       .from('tours')
       .select('id, slug, total_places, departure_date')
@@ -54,9 +61,10 @@ async function loadDashboard(): Promise<TourGroup[]> {
     db
       .from('reservation_passengers')
       .select(
-        'reservation_id, position, given_names, surname, person_type, room_type, date_of_birth, passport_expiry, passport_renewal_required, passport_photo_uploaded_at'
+        'id, reservation_id, position, given_names, surname, person_type, room_type, room_allocation_id, date_of_birth, passport_expiry, passport_renewal_required, passport_photo_uploaded_at'
       )
       .order('position', { ascending: true }),
+    db.from('room_allocations').select('id, label'),
   ])
 
   const passengersByReservation = new Map<string, BookingPassenger[]>()
@@ -84,7 +92,41 @@ async function loadDashboard(): Promise<TourGroup[]> {
     tourRows.map(t => db.rpc('get_places_taken', { p_tour_slug: t.slug }))
   )
 
-  return tourRows.map((t, i) => ({
+  const tourLabelById = new Map(tourRows.map(t => [t.id, formatTourLabel(t.slug)]))
+  const tourDepartureById = new Map(tourRows.map(t => [t.id, t.departure_date]))
+  const roomLabelById = new Map(
+    ((roomAllocations.data ?? []) as Array<{ id: string; label: string }>).map(r => [r.id, r.label])
+  )
+  const todayISO = new Date().toISOString().slice(0, 10)
+
+  const customers: CustomerRow[] = allBookings.flatMap(b =>
+    b.passengers.map(p => ({
+      id: p.id,
+      reservationId: b.id,
+      reservationCode: b.reservation_code,
+      tourId: b.tour_id,
+      tourLabel: tourLabelById.get(b.tour_id) ?? '—',
+      leadName: `${b.lead_given_names} ${b.lead_surname}`,
+      leadEmail: b.lead_email,
+      leadPhone: b.lead_phone,
+      name: `${p.given_names} ${p.surname}`,
+      personType: p.person_type,
+      // Age band as of the tour's departure — the age that actually matters
+      // for trip planning — separate from person_type, which the customer
+      // self-selects at booking time for bed/pricing purposes.
+      ageGroup: ageGroup(p.date_of_birth, tourDepartureById.get(b.tour_id) ?? todayISO),
+      roomType: p.room_type,
+      roomLabel: p.room_allocation_id ? roomLabelById.get(p.room_allocation_id) ?? null : null,
+      dateOfBirth: p.date_of_birth,
+      passportExpiry: p.passport_expiry,
+      passportRenewalRequired: p.passport_renewal_required,
+      passportPhotoUploadedAt: p.passport_photo_uploaded_at,
+      status: b.status,
+      createdAt: b.created_at,
+    }))
+  )
+
+  const groups = tourRows.map((t, i) => ({
     tour: {
       id: t.id,
       slug: t.slug,
@@ -96,16 +138,30 @@ async function loadDashboard(): Promise<TourGroup[]> {
     bookings: allBookings.filter(b => b.tour_id === t.id),
     waiting: allWaiting.filter(w => w.tour_id === t.id),
   }))
+
+  return {
+    groups,
+    customers,
+    tours: tourRows.map(t => ({ id: t.id, label: formatTourLabel(t.slug) })),
+  }
 }
 
 export default async function AdminDashboard() {
-  const groups = await loadDashboard()
+  const { groups, customers, tours } = await loadDashboard()
 
   return (
     <div className="flex flex-col gap-10">
       <section>
         <h1 className="text-2xl sm:text-3xl font-bold text-stone-900">Dashboard</h1>
         <p className="text-stone-500 text-sm mt-1">Bookings overview, by tour</p>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold text-stone-900 mb-3">
+          All customers
+          <span className="ml-2 text-xs font-normal text-stone-400">{customers.length} total</span>
+        </h2>
+        <CustomerDirectory customers={customers} tours={tours} />
       </section>
 
       {groups.length === 0 ? (
@@ -178,12 +234,20 @@ function TourSection({ group }: { group: TourGroup }) {
             <p className="text-xs text-stone-500 mt-0.5">Departs {formatDate(tour.departureDate)}</p>
           )}
         </div>
-        <Link
-          href={`/admin/rooms/${tour.id}`}
-          className="text-xs font-semibold bg-stone-900 text-white rounded-full px-4 py-2 hover:bg-stone-800 transition"
-        >
-          Room allocations →
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/admin/finance/${tour.id}`}
+            className="text-xs font-semibold bg-white border border-stone-300 text-stone-700 rounded-full px-4 py-2 hover:border-stone-400 transition"
+          >
+            Financial breakdown →
+          </Link>
+          <Link
+            href={`/admin/rooms/${tour.id}`}
+            className="text-xs font-semibold bg-stone-900 text-white rounded-full px-4 py-2 hover:bg-stone-800 transition"
+          >
+            Room allocations →
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4">
@@ -209,7 +273,7 @@ function TourSection({ group }: { group: TourGroup }) {
 
       <div>
         <h3 className="text-lg font-semibold text-stone-900 mb-3">Bookings</h3>
-        <BookingsList bookings={bookings} counts={counts} />
+        <BookingsList bookings={bookings} counts={counts} departureDate={tour.departureDate} />
       </div>
 
       <div>

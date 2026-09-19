@@ -13,7 +13,10 @@ export const DEPOSIT_PER_PERSON_GBP = 299
 
 export const PROMO_CODES = {
   GHOCT2026: { quad: 1559, triple: 1636, double: 1788 },
-  ADMIN2026: { quad: 0, triple: 77, double: 152 },
+  ADMIN2026: { quad: 0, triple: 77, double: 229 },
+  // Ground-package-only rate: actual ground cost per room type (574/651/803)
+  // plus a flat £150 — this code doesn't include flights.
+  GROUND2026: { quad: 724, triple: 801, double: 953 },
 } as const
 
 export type PromoCode = keyof typeof PROMO_CODES
@@ -95,14 +98,33 @@ export function isValidEmail(s: string): boolean {
 // form is being scripted.
 export const MAX_AGE_YEARS = 120
 
+export function ageInYears(dob: string, referenceISO: string): number {
+  const [y, m, d] = dob.split('-').map(Number)
+  const [ry, rm, rd] = referenceISO.split('-').map(Number)
+  let age = ry - y
+  if (rm < m || (rm === m && rd < d)) age -= 1
+  return age
+}
+
 export function isValidDateOfBirth(dob: string, todayISO: string): boolean {
   if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob)) return false
   if (dob >= todayISO) return false
-  const [y, m, d] = dob.split('-').map(Number)
-  const [ty, tm, td] = todayISO.split('-').map(Number)
-  let age = ty - y
-  if (tm < m || (tm === m && td < d)) age -= 1
+  const age = ageInYears(dob, todayISO)
   return age >= 0 && age <= MAX_AGE_YEARS
+}
+
+// Admin-only age banding, separate from the customer-facing person_type
+// (adult/infant) they self-select at booking time for bed/pricing purposes —
+// this is purely a DOB-derived insight for trip planning (meals, seating,
+// documentation), computed as of the tour's departure date since that's the
+// age that actually matters for the trip, not today's.
+export type AgeGroup = 'infant' | 'youth' | 'adult'
+
+export function ageGroup(dob: string, referenceISO: string): AgeGroup {
+  const age = ageInYears(dob, referenceISO)
+  if (age < 2) return 'infant'
+  if (age < 15) return 'youth'
+  return 'adult'
 }
 
 export function cap(s: string): string {
