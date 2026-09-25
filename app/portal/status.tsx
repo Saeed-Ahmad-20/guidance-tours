@@ -41,11 +41,19 @@ export type PortalReservation = {
 }
 
 
+export type PortalRoom = {
+  id: string
+  occupants: string[] // ids of the viewer's visible passengers in this room
+  members: Array<{ name: string; isYou: boolean }>
+}
+
 export default function PortalStatus({
   reservation,
+  rooms,
   viewer,
 }: {
   reservation: PortalReservation
+  rooms: PortalRoom[]
   viewer: { isLead: boolean; name: string }
 }) {
   const router = useRouter()
@@ -286,6 +294,10 @@ export default function PortalStatus({
           </>
         )}
 
+        {s !== 'expired' && s !== 'cancelled' && (
+          <RoomsSection rooms={rooms} passengers={reservation.passengers} isLead={viewer.isLead} />
+        )}
+
         <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7 mt-5">
           <h2 className="font-semibold text-stone-900 mb-1">
             {viewer.isLead ? 'Passengers' : 'Your passport'}
@@ -419,6 +431,64 @@ function StatusCard({
         </div>
       </div>
     </div>
+  )
+}
+
+function RoomsSection({
+  rooms,
+  passengers,
+  isLead,
+}: {
+  rooms: PortalRoom[]
+  passengers: PortalReservation['passengers']
+  isLead: boolean
+}) {
+  const allocated = new Set(rooms.flatMap(r => r.occupants))
+  const waiting = passengers.filter(p => !allocated.has(p.id))
+  const multi = rooms.length > 1
+
+  return (
+    <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7 mt-5">
+      <h2 className="font-semibold text-stone-900 mb-1">
+        {isLead ? (multi ? 'Your rooms' : 'Your room') : 'Your room'}
+      </h2>
+      <p className="text-sm text-stone-500 mb-3">
+        Who you&apos;ll be sharing with in Madinah and Makkah.
+      </p>
+
+      {rooms.length === 0 ? (
+        <p className="text-sm text-stone-600">
+          Rooms haven&apos;t been allocated yet — you&apos;ll see who you&apos;re sharing with here
+          once they are.
+        </p>
+      ) : (
+        <div className={`grid gap-3 ${multi ? 'sm:grid-cols-2' : ''}`}>
+          {rooms.map((room, i) => (
+            <div key={room.id} className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+              {multi && (
+                <p className="text-xs uppercase tracking-wider text-stone-500 font-semibold mb-2">
+                  Room {i + 1}
+                </p>
+              )}
+              <ul className="flex flex-col gap-1.5">
+                {room.members.map((m, j) => (
+                  <li key={j} className="text-sm text-stone-900">
+                    {m.name}
+                    {m.isYou && <span className="ml-2 text-xs font-semibold text-[#8a6e1f]">You</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {rooms.length > 0 && waiting.length > 0 && (
+        <p className="text-xs text-stone-500 mt-3">
+          Not yet allocated: {waiting.map(p => `${p.given_names} ${p.surname}`.trim()).join(', ')}
+        </p>
+      )}
+    </section>
   )
 }
 

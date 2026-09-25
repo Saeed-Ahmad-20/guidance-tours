@@ -3,7 +3,7 @@ import { getPortalSession, publicSiteHref } from '../lib/portal-session'
 import { BOOKING_DISPLAY_TTL_HOURS, BOOKING_TTL_HOURS } from '../lib/booking'
 import { getPassportPhotoSignedUrl } from '../lib/passport-storage'
 import LoginForm from './login-form'
-import PortalStatus, { type PortalReservation } from './status'
+import PortalStatus, { type PortalReservation, type PortalRoom } from './status'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +64,41 @@ async function loadReservation(rid: string): Promise<PortalReservation | null> {
   }
 }
 
+// Roommates can come from other bookings, so only their names leave the server.
+async function loadRooms(
+  visible: PortalReservation['passengers'],
+  youId: string
+): Promise<PortalRoom[]> {
+  const db = supabaseAdmin()
+  const { data: own } = await db
+    .from('reservation_passengers')
+    .select('id, room_allocation_id')
+    .in('id', visible.map(p => p.id))
+  const roomIdByPassenger = new Map(
+    ((own ?? []) as Array<{ id: string; room_allocation_id: string | null }>).map(p => [p.id, p.room_allocation_id])
+  )
+  const roomIds = [...new Set(visible.map(p => roomIdByPassenger.get(p.id)).filter((id): id is string => Boolean(id)))]
+  if (roomIds.length === 0) return []
+
+  const { data: members } = await db
+    .from('reservation_passengers')
+    .select('id, given_names, surname, room_allocation_id')
+    .in('room_allocation_id', roomIds)
+  const rows = (members ?? []) as Array<{ id: string; given_names: string; surname: string; room_allocation_id: string }>
+
+  return roomIds.map(roomId => ({
+    id: roomId,
+    occupants: visible.filter(p => roomIdByPassenger.get(p.id) === roomId).map(p => p.id),
+    members: rows
+      .filter(m => m.room_allocation_id === roomId)
+      .map(m => ({
+        name: `${m.given_names} ${m.surname}`.replace(/\s+/g, ' ').trim(),
+        isYou: m.id === youId,
+      }))
+      .sort((a, b) => Number(b.isYou) - Number(a.isYou) || a.name.localeCompare(b.name)),
+  }))
+}
+
 export default async function PortalPage({
   searchParams,
 }: {
@@ -106,9 +141,12 @@ export default async function PortalPage({
         confirmed_at: null,
       }
 
+  const rooms = await loadRooms(visible.passengers, me.id)
+
   return (
     <PortalStatus
       reservation={visible}
+      rooms={rooms}
       viewer={{ isLead: session.lead, name: `${me.given_names} ${me.surname}`.trim() }}
     />
   )

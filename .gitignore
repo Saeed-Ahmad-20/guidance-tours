@@ -44,3 +44,6 @@ next-env.d.ts
 /FLIGHT TICKETS/
 /visas/
 /flight/
+
+# one-off email send log
+/scripts/portal-update-sent.log
