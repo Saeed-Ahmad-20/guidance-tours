@@ -8,9 +8,11 @@ import { portalLogin } from '../actions/portal'
 export default function LoginForm({
   prefilledCode = '',
   error: initialError = '',
+  bookHref,
 }: {
   prefilledCode?: string
   error?: string
+  bookHref: string
 }) {
   const router = useRouter()
   const [code, setCode] = useState(prefilledCode)
@@ -33,12 +35,13 @@ export default function LoginForm({
   }
 
   return (
-    <div className="w-full bg-stone-50 min-h-[calc(100vh-4rem)]">
+    <div className="w-full">
       <div className="max-w-md mx-auto px-4 sm:px-6 py-12 sm:py-20">
         <div className="text-center mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-stone-900">Booking portal</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-stone-900">Passenger portal</h1>
           <p className="text-stone-500 mt-2 text-sm">
-            Log in with your reservation number and surname.
+            Every passenger has their own login. Use your booking&apos;s reservation number
+            with your own surname and date of birth.
           </p>
         </div>
 
@@ -65,14 +68,25 @@ export default function LoginForm({
             />
           </label>
 
-          <label className="flex flex-col gap-1.5 text-sm mb-5">
-            <span className="text-stone-700 font-medium">Surname of lead Passenger</span>
+          <label className="flex flex-col gap-1.5 text-sm mb-4">
+            <span className="text-stone-700 font-medium">Your surname</span>
             <input
               name="surname"
               value={surname}
               onChange={e => setSurname(e.target.value)}
               required
               autoComplete="family-name"
+              className="rounded-lg border border-stone-300 px-3 py-2.5 text-sm bg-white focus:border-[#C4A348] focus:ring-2 focus:ring-[#C4A348]/20 outline-none transition"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-sm mb-5">
+            <span className="text-stone-700 font-medium">Your date of birth</span>
+            <input
+              name="date_of_birth"
+              type="date"
+              required
+              autoComplete="bday"
               className="rounded-lg border border-stone-300 px-3 py-2.5 text-sm bg-white focus:border-[#C4A348] focus:ring-2 focus:ring-[#C4A348]/20 outline-none transition"
             />
           </label>
@@ -94,7 +108,7 @@ export default function LoginForm({
 
         <p className="text-center text-xs text-stone-400 mt-6">
           Don&apos;t have a reservation?{' '}
-          <Link href="/umrah-2026/book" className="text-[#C4A348] hover:underline">
+          <Link href={bookHref} className="text-[#C4A348] hover:underline">
             Book a place
           </Link>
         </p>

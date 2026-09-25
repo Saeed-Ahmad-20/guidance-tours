@@ -1,6 +1,5 @@
-import { cookies } from 'next/headers'
 import { supabaseAdmin } from '../lib/supabase-admin'
-import { PORTAL_COOKIE, verifyPortalSession } from '../lib/portal-session'
+import { getPortalSession, publicSiteHref } from '../lib/portal-session'
 import { BOOKING_DISPLAY_TTL_HOURS, BOOKING_TTL_HOURS } from '../lib/booking'
 import { getPassportPhotoSignedUrl } from '../lib/passport-storage'
 import LoginForm from './login-form'
@@ -71,18 +70,46 @@ export default async function PortalPage({
   searchParams: Promise<{ code?: string }>
 }) {
   const { code } = await searchParams
-  const store = await cookies()
-  const cookie = store.get(PORTAL_COOKIE)?.value
-  const rid = await verifyPortalSession(cookie)
+  const session = await getPortalSession()
+  const bookHref = await publicSiteHref('/umrah-2026/book')
 
-  if (!rid) {
-    return <LoginForm prefilledCode={code ?? ''} />
+  if (!session) {
+    return <LoginForm prefilledCode={code ?? ''} bookHref={bookHref} />
   }
 
-  const reservation = await loadReservation(rid)
-  if (!reservation) {
-    return <LoginForm prefilledCode={code ?? ''} error="Your session is no longer valid. Please log in again." />
+  const reservation = await loadReservation(session.rid)
+  const me = reservation?.passengers.find(p => p.id === session.pid)
+  if (!reservation || !me) {
+    return <LoginForm prefilledCode={code ?? ''} bookHref={bookHref} error="Your session is no longer valid. Please log in again." />
   }
 
-  return <PortalStatus reservation={reservation} />
+  // Everything passed to PortalStatus is serialised to the browser, so a
+  // non-lead passenger must only receive what their own view needs.
+  const visible: PortalReservation = session.lead
+    ? reservation
+    : {
+        ...reservation,
+        passengers: [me],
+        lead_email: null,
+        lead_phone: null,
+        admin_note: null,
+        total_people: 0,
+        total_cost_gbp: 0,
+        deposit_amount_gbp: 0,
+        amount_received_gbp: 0,
+        last_claimed_amount_gbp: null,
+        last_claimed_at: null,
+        created_at: '',
+        expires_at: '',
+        display_expires_at: '',
+        transfer_submitted_at: null,
+        confirmed_at: null,
+      }
+
+  return (
+    <PortalStatus
+      reservation={visible}
+      viewer={{ isLead: session.lead, name: `${me.given_names} ${me.surname}`.trim() }}
+    />
+  )
 }

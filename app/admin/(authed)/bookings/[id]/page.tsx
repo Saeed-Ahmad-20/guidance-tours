@@ -5,6 +5,8 @@ import { effectiveDepositGBP, formatGBP } from '../../../../lib/booking'
 import BookingActions from './booking-actions'
 import LeadContactEditor from './lead-contact-editor'
 import PassengerEditor from './passenger-editor'
+import TravelDocuments, { type AdminTravelDoc } from './travel-documents'
+import { getTravelDocumentSignedUrl } from '../../../../lib/travel-documents'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +71,21 @@ async function loadBooking(id: string): Promise<ReservationFull | null> {
   }
 }
 
+async function loadTravelDocuments(reservationId: string): Promise<AdminTravelDoc[]> {
+  const { data } = await supabaseAdmin()
+    .from('passenger_documents')
+    .select('id, passenger_id, doc_type, label, storage_path, created_at')
+    .eq('reservation_id', reservationId)
+    .order('created_at', { ascending: true })
+  const rows = (data ?? []) as Array<Omit<AdminTravelDoc, 'url'> & { storage_path: string }>
+  return Promise.all(
+    rows.map(async ({ storage_path, ...d }) => ({
+      ...d,
+      url: await getTravelDocumentSignedUrl(storage_path),
+    }))
+  )
+}
+
 export default async function BookingDetailPage({
   params,
 }: {
@@ -77,6 +94,7 @@ export default async function BookingDetailPage({
   const { id } = await params
   const booking = await loadBooking(id)
   if (!booking) notFound()
+  const documents = await loadTravelDocuments(id)
 
   const hasActions = booking.status !== 'expired' && booking.status !== 'cancelled'
 
@@ -226,6 +244,18 @@ export default async function BookingDetailPage({
       <section className="bg-white rounded-xl border border-stone-200 p-5 sm:p-6">
         <h2 className="text-sm font-semibold text-stone-900 mb-4">Passengers</h2>
         <PassengerEditor reservationId={booking.id} passengers={booking.passengers} />
+      </section>
+
+      <section className="bg-white rounded-xl border border-stone-200 p-5 sm:p-6">
+        <h2 className="text-sm font-semibold text-stone-900 mb-1">Travel documents</h2>
+        <p className="text-xs text-stone-500 mb-4">
+          Flight tickets, train tickets and e-visas uploaded here appear in the passenger portal.
+        </p>
+        <TravelDocuments
+          reservationId={booking.id}
+          passengers={booking.passengers}
+          documents={documents}
+        />
       </section>
 
       {hasActions && (

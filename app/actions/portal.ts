@@ -11,11 +11,36 @@ import { uploadPassportPhotoToDrive } from '../lib/google-drive'
 import { uploadPassportPhotoToStorage } from '../lib/passport-storage'
 import {
   PORTAL_COOKIE,
+  getPortalSession,
   signPortalSession,
-  verifyPortalSession,
 } from '../lib/portal-session'
+import { CHECKLIST_KEYS } from '../portal/checklist/checklist-items'
 
 const isProd = process.env.NODE_ENV === 'production'
+
+export async function setChecklistItem(
+  itemKey: string,
+  checked: boolean
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await assertSameOrigin()
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Your session has expired. Please log in again.' }
+  if (!CHECKLIST_KEYS.has(itemKey)) return { ok: false, error: 'Unknown checklist item.' }
+
+  const table = supabaseAdmin().from('passenger_checklist')
+  const { error } = checked
+    ? await table.upsert(
+        { passenger_id: session.pid, item_key: itemKey },
+        { onConflict: 'passenger_id,item_key', ignoreDuplicates: true }
+      )
+    : await table.delete().eq('passenger_id', session.pid).eq('item_key', itemKey)
+
+  if (error) {
+    console.error('setChecklistItem error:', error.message)
+    return { ok: false, error: 'Could not save. Please try again.' }
+  }
+  return { ok: true }
+}
 
 export type PortalLoginResult =
   | { ok: true }
@@ -25,9 +50,13 @@ export async function portalLogin(formData: FormData): Promise<PortalLoginResult
   await assertSameOrigin()
   const rawCode = (formData.get('reservation_code') as string | null)?.trim() ?? ''
   const rawSurname = (formData.get('surname') as string | null)?.trim() ?? ''
+  const rawDob = (formData.get('date_of_birth') as string | null)?.trim() ?? ''
 
-  if (!rawCode || !rawSurname) {
-    return { ok: false, error: 'Please enter your reservation number and surname.' }
+  if (!rawCode || !rawSurname || !rawDob) {
+    return { ok: false, error: 'Please enter your reservation number, surname and date of birth.' }
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDob)) {
+    return { ok: false, error: 'Please enter a valid date of birth.' }
   }
 
   // Reservation code is 8 chars case-sensitive. Basic shape check avoids obvious abuse.
@@ -47,7 +76,7 @@ export async function portalLogin(formData: FormData): Promise<PortalLoginResult
 
   const { data, error } = await db
     .from('reservations')
-    .select('id, lead_surname, status')
+    .select('id')
     .eq('reservation_code', rawCode)
     .maybeSingle()
 
@@ -55,18 +84,31 @@ export async function portalLogin(formData: FormData): Promise<PortalLoginResult
     console.error('portalLogin error:', error.message)
     return { ok: false, error: 'Something went wrong. Please try again.' }
   }
-  if (!data) {
-    return { ok: false, error: 'No booking matches those details.' }
-  }
+  const noMatch = { ok: false as const, error: 'No passenger matches those details.' }
+  if (!data) return noMatch
+  const rid = (data as { id: string }).id
 
-  const row = data as { id: string; lead_surname: string; status: string }
+  const { data: passengers, error: paxErr } = await db
+    .from('reservation_passengers')
+    .select('id, surname, date_of_birth, position')
+    .eq('reservation_id', rid)
+    .order('position', { ascending: true })
+  if (paxErr || !passengers || passengers.length === 0) return noMatch
 
-  if (row.lead_surname.trim().toLowerCase() !== rawSurname.toLowerCase()) {
-    return { ok: false, error: 'No booking matches those details.' }
-  }
+  const rows = passengers as Array<{ id: string; surname: string; date_of_birth: string; position: number }>
+  const surname = rawSurname.toLowerCase()
+  const matches = rows.filter(
+    p => p.surname.trim().toLowerCase() === surname && p.date_of_birth === rawDob
+  )
+  if (matches.length !== 1) return noMatch
 
   await resetRateLimit('portalLogin', ip)
-  const { value, maxAge } = await signPortalSession(row.id)
+  const { value, maxAge } = await signPortalSession({
+    rid,
+    pid: matches[0].id,
+    // The lead passenger is always the first passenger on the booking.
+    lead: matches[0].id === rows[0].id,
+  })
   const store = await cookies()
   store.set(PORTAL_COOKIE, value, {
     httpOnly: true,
@@ -83,17 +125,17 @@ export async function portalLogout() {
   await assertSameOrigin()
   const store = await cookies()
   store.delete(PORTAL_COOKIE)
-  revalidatePath('/portal')
+  revalidatePath('/portal', 'layout')
 }
 
 export type UpdateContactResult = { ok: true } | { ok: false; error: string }
 
 export async function updateLeadContact(email: string, phone: string): Promise<UpdateContactResult> {
   await assertSameOrigin()
-  const store = await cookies()
-  const cookie = store.get(PORTAL_COOKIE)?.value
-  const rid = await verifyPortalSession(cookie)
-  if (!rid) return { ok: false, error: 'Your session has expired. Please log in again.' }
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Your session has expired. Please log in again.' }
+  if (!session.lead) return { ok: false, error: 'Only the lead passenger can change contact details.' }
+  const rid = session.rid
 
   const trimmedEmail = email.trim()
   if (trimmedEmail && !isValidEmail(trimmedEmail)) {
@@ -124,10 +166,10 @@ export type MarkDepositResult =
 
 export async function markPaymentSent(amountClaimedGbp: number): Promise<MarkDepositResult> {
   await assertSameOrigin()
-  const store = await cookies()
-  const cookie = store.get(PORTAL_COOKIE)?.value
-  const rid = await verifyPortalSession(cookie)
-  if (!rid) return { ok: false, error: 'Your session has expired. Please log in again.' }
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Your session has expired. Please log in again.' }
+  if (!session.lead) return { ok: false, error: 'Only the lead passenger can record payments.' }
+  const rid = session.rid
 
   const db = supabaseAdmin()
   await db.rpc('expire_old_reservations')
@@ -227,10 +269,12 @@ export async function uploadPassportPhoto(
   formData: FormData
 ): Promise<UploadPassportPhotoResult> {
   await assertSameOrigin()
-  const store = await cookies()
-  const cookie = store.get(PORTAL_COOKIE)?.value
-  const rid = await verifyPortalSession(cookie)
-  if (!rid) return { ok: false, error: 'Your session has expired. Please log in again.' }
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Your session has expired. Please log in again.' }
+  if (!session.lead && passengerId !== session.pid) {
+    return { ok: false, error: 'You can only upload your own passport.' }
+  }
+  const rid = session.rid
 
   const ip = await clientIp()
   if (!(await checkRateLimit('uploadPassportPhoto', ip, 30, 60 * 60 * 1000))) {

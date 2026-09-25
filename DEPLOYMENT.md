@@ -27,6 +27,7 @@ Every one is platform-agnostic.
 | `ADMIN_NOTIFICATION_EMAIL` | Where admin notifications go |
 | `SITE_URL` | Public site origin, e.g. `https://www.guidancetours.co.uk` |
 | `ADMIN_SITE_URL` | Admin origin, e.g. `https://admin.guidancetours.co.uk` |
+| `PORTAL_SITE_URL` | Passenger portal origin, e.g. `https://portal.guidancetours.co.uk` (set only once the subdomain resolves) |
 | `CRON_SECRET` | 32+ random bytes hex, required as a Bearer token by the cron route |
 | `GOOGLE_DRIVE_OAUTH_CLIENT_ID` | OAuth client id (Desktop app) used to upload passport photos to Google Drive |
 | `GOOGLE_DRIVE_OAUTH_CLIENT_SECRET` | OAuth client secret for the same client |
@@ -114,6 +115,24 @@ Netlify, Cloudflare Pages, Node self-host). All you do on the host side is:
 3. On other platforms: configure two hostnames → same Node process / same
    build output. If using nginx, a single `server_name` block covering both
    hosts proxying to the Node port works.
+
+### Passenger portal subdomain (`portal.guidancetours.co.uk`)
+
+Same mechanism: [proxy.ts](proxy.ts) rewrites `portal.*` requests to
+`/portal/*` (booking status, travel documents, webinars).
+
+1. Run the migration `supabase/migrations/20260925_portal_documents_webinars.sql`
+   (creates `passenger_documents`, `webinars` and the private
+   `travel-documents` storage bucket).
+2. Add `portal.guidancetours.co.uk` to the same deployment (Vercel → Project →
+   Domains) and point the DNS record at it.
+3. Once it resolves, set `PORTAL_SITE_URL=https://portal.guidancetours.co.uk`
+   and redeploy. Emails then link to the subdomain, and old
+   `www.guidancetours.co.uk/portal` links redirect there. Until it's set,
+   everything keeps using `/portal` on the main domain.
+
+Admins upload tickets/e-visas on each booking's page and manage recordings at
+`/admin/webinars`.
 
 ## 5. Scheduling the cron (the only Vercel-ish part)
 

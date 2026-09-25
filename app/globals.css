@@ -21,3 +21,9 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* On portal.* the browser path has no /portal prefix, so the public site
+   chrome can't hide itself by pathname; the portal layout's marker does it. */
+body:has([data-portal-shell]) [data-site-chrome] {
+  display: none;
+}

@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# passenger travel documents (personal data) - uploaded to private storage, never commit
+/FLIGHT TICKETS/
+/visas/
+/flight/

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { markPaymentSent, portalLogout, updateLeadContact, uploadPassportPhoto } from '../actions/portal'
+import { markPaymentSent, updateLeadContact, uploadPassportPhoto } from '../actions/portal'
 import { BANK_DETAILS, cap, formatGBP } from '../lib/booking'
 
 export type PortalReservation = {
@@ -41,17 +41,16 @@ export type PortalReservation = {
 }
 
 
-export default function PortalStatus({ reservation }: { reservation: PortalReservation }) {
+export default function PortalStatus({
+  reservation,
+  viewer,
+}: {
+  reservation: PortalReservation
+  viewer: { isLead: boolean; name: string }
+}) {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-
-  function onLogout() {
-    startTransition(async () => {
-      await portalLogout()
-      router.refresh()
-    })
-  }
 
   const s = reservation.status
   const remaining = Math.max(0, reservation.total_cost_gbp - reservation.amount_received_gbp)
@@ -99,29 +98,27 @@ export default function PortalStatus({ reservation }: { reservation: PortalReser
   }
 
   return (
-    <div className="w-full bg-stone-50 min-h-[calc(100vh-4rem)]">
+    <div className="w-full">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <p className="text-xs text-stone-500 uppercase tracking-widest">Reservation</p>
-            <p className="font-mono text-xl sm:text-2xl font-bold text-stone-900 tracking-wider select-all">
-              {reservation.reservation_code}
-            </p>
-            <p className="text-sm text-stone-500 mt-1">
-              {reservation.lead_given_names} {reservation.lead_surname} · {reservation.total_people} {reservation.total_people === 1 ? 'person' : 'people'}
-            </p>
-          </div>
-          <button
-            onClick={onLogout}
-            className="text-xs text-stone-400 hover:text-stone-700 transition"
-          >
-            Log out
-          </button>
+        <div className="mb-6">
+          <p className="text-xs text-stone-500 uppercase tracking-widest">Reservation</p>
+          <p className="font-mono text-xl sm:text-2xl font-bold text-stone-900 tracking-wider select-all">
+            {reservation.reservation_code}
+          </p>
+          <p className="text-sm text-stone-500 mt-1">
+            {viewer.isLead
+              ? `${reservation.lead_given_names} ${reservation.lead_surname} · ${reservation.total_people} ${reservation.total_people === 1 ? 'person' : 'people'}`
+              : `Signed in as ${viewer.name} · booked by ${reservation.lead_given_names} ${reservation.lead_surname}`}
+          </p>
         </div>
 
-        <StatusCard status={s} reservation={reservation} />
+        {viewer.isLead ? (
+          <StatusCard status={s} reservation={reservation} />
+        ) : (
+          <TravellerStatusCard status={s} leadName={`${reservation.lead_given_names} ${reservation.lead_surname}`.trim()} />
+        )}
 
-        {remaining > 0 && s !== 'expired' && s !== 'cancelled' && (
+        {viewer.isLead && remaining > 0 && s !== 'expired' && s !== 'cancelled' && (
           <>
             {s === 'pending_payment' && <Countdown expiresAt={reservation.display_expires_at} />}
 
@@ -290,9 +287,13 @@ export default function PortalStatus({ reservation }: { reservation: PortalReser
         )}
 
         <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7 mt-5">
-          <h2 className="font-semibold text-stone-900 mb-1">Passengers</h2>
+          <h2 className="font-semibold text-stone-900 mb-1">
+            {viewer.isLead ? 'Passengers' : 'Your passport'}
+          </h2>
           <p className="text-sm text-stone-500 mb-1">
-            Please upload a clear photo or scan of each passenger&apos;s passport (photo page).
+            {viewer.isLead
+              ? 'Please upload a clear photo or scan of each passenger’s passport (photo page).'
+              : 'Please upload a clear photo or scan of your passport (photo page).'}
           </p>
           <PassportExample />
           <ul className="divide-y divide-stone-100 mt-2">
@@ -323,10 +324,12 @@ export default function PortalStatus({ reservation }: { reservation: PortalReser
           </ul>
         </section>
 
-        <ContactEditor
-          email={reservation.lead_email || ''}
-          phone={reservation.lead_phone || ''}
-        />
+        {viewer.isLead && (
+          <ContactEditor
+            email={reservation.lead_email || ''}
+            phone={reservation.lead_phone || ''}
+          />
+        )}
 
         <p className="text-xs text-stone-400 text-center mt-8">
           Need help? Contact us on WhatsApp at{' '}
@@ -413,6 +416,34 @@ function StatusCard({
               </p>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TravellerStatusCard({
+  status,
+  leadName,
+}: {
+  status: PortalReservation['status']
+  leadName: string
+}) {
+  const config = {
+    pending_payment: { tone: 'bg-amber-50 border-amber-200 text-amber-900', icon: '⏳', title: 'Booking in progress', body: `${leadName} is completing payment for this booking.` },
+    transfer_submitted: { tone: 'bg-blue-50 border-blue-200 text-blue-900', icon: '🔎', title: 'Booking in progress', body: `We're confirming payment from ${leadName}.` },
+    confirmed: { tone: 'bg-emerald-50 border-emerald-200 text-emerald-900', icon: '✓', title: 'Your place is confirmed', body: 'Your tickets, e-visa and pre-departure webinars are in the tabs above.' },
+    expired: { tone: 'bg-stone-100 border-stone-200 text-stone-700', icon: '⌛', title: 'This booking has expired', body: `Please speak to ${leadName} or contact us.` },
+    cancelled: { tone: 'bg-stone-100 border-stone-200 text-stone-700', icon: '✕', title: 'This booking was cancelled', body: `Please speak to ${leadName} or contact us.` },
+  }[status]
+
+  return (
+    <div className={`rounded-2xl border p-5 sm:p-6 ${config.tone}`}>
+      <div className="flex items-start gap-3">
+        <span className="text-2xl leading-none">{config.icon}</span>
+        <div className="flex-1">
+          <p className="font-semibold">{config.title}</p>
+          <p className="text-sm mt-1 leading-relaxed">{config.body}</p>
         </div>
       </div>
     </div>

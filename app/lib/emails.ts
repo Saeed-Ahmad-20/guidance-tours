@@ -30,6 +30,11 @@ function siteUrl(): string {
   return process.env.SITE_URL || 'https://www.guidancetours.co.uk'
 }
 
+export function portalLoginUrl(reservationCode: string): string {
+  const base = process.env.PORTAL_SITE_URL || `${siteUrl()}/portal`
+  return `${base}?code=${encodeURIComponent(reservationCode)}`
+}
+
 function adminSiteUrl(): string {
   return process.env.ADMIN_SITE_URL || 'https://admin.guidancetours.co.uk'
 }
@@ -72,7 +77,7 @@ export async function sendBookingCreated(args: {
   depositAmountGBP: number
   totalPeople: number
 }): Promise<void> {
-  const portalUrl = `${siteUrl()}/portal?code=${encodeURIComponent(args.reservationCode)}`
+  const portalUrl = portalLoginUrl(args.reservationCode)
   await send({
     to: args.to,
     subject: `Reservation ${args.reservationCode} — transfer £${args.depositAmountGBP} to secure your place`,
@@ -152,7 +157,7 @@ export async function sendExpiryWarning(args: {
   reservationCode: string
   depositAmountGBP: number
 }): Promise<void> {
-  const portalUrl = `${siteUrl()}/portal?code=${encodeURIComponent(args.reservationCode)}`
+  const portalUrl = portalLoginUrl(args.reservationCode)
   await send({
     to: args.to,
     subject: `1 hour left — confirm your deposit for ${args.reservationCode}`,
@@ -213,7 +218,7 @@ export async function sendAdminMessage(args: {
   reservationCode: string
   message: string
 }): Promise<void> {
-  const portalUrl = `${siteUrl()}/portal?code=${encodeURIComponent(args.reservationCode)}`
+  const portalUrl = portalLoginUrl(args.reservationCode)
   await send({
     to: args.to,
     subject: `Update on your booking ${args.reservationCode}`,

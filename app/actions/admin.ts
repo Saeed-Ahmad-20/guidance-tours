@@ -2,9 +2,10 @@
 
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { createHash, timingSafeEqual } from 'node:crypto'
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
 import { supabaseAdmin } from '../lib/supabase-admin'
 import {
+  portalLoginUrl,
   sendAdminMessage,
   sendBookingCancelled,
   sendDepositConfirmed,
@@ -28,6 +29,15 @@ import {
 import { checkRateLimit, clientIp, resetRateLimit } from '../lib/rate-limit'
 import { assertSameOrigin } from '../lib/csrf'
 import { getAdminCredentials } from '../lib/env'
+import {
+  MAX_TRAVEL_DOC_BYTES,
+  TRAVEL_DOC_MIME_EXT,
+  isTravelDocType,
+} from '../lib/portal-content'
+import {
+  removeTravelDocumentFromStorage,
+  uploadTravelDocumentToStorage,
+} from '../lib/travel-documents'
 
 const isProd = process.env.NODE_ENV === 'production'
 
@@ -252,7 +262,7 @@ export async function revertToPending(
     return { ok: false, error: 'Could not update booking.' }
   }
 
-  const portalUrl = `${process.env.SITE_URL || 'https://www.guidancetours.co.uk'}/portal?code=${encodeURIComponent(row.reservation_code)}`
+  const portalUrl = portalLoginUrl(row.reservation_code)
   await sendStatusReverted({
     to: row.lead_email,
     leadGivenNames: row.lead_given_names,
@@ -885,5 +895,154 @@ async function autoAllocateRoomType(
     if (error) console.error('autoAllocateRooms cleanup error:', error.message)
   }
 
+  return { ok: true }
+}
+
+export async function uploadTravelDocument(
+  reservationId: string,
+  formData: FormData
+): Promise<AdminActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const docType = formData.get('doc_type')
+  if (!isTravelDocType(docType)) return { ok: false, error: 'Choose a document type.' }
+
+  const label = ((formData.get('label') as string | null) ?? '').trim()
+  if (!label) return { ok: false, error: 'Give the document a name.' }
+  if (label.length > 120) return { ok: false, error: 'Name must be 120 characters or fewer.' }
+
+  const file = formData.get('file')
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: 'Choose a file.' }
+  const ext = TRAVEL_DOC_MIME_EXT[file.type]
+  if (!ext) return { ok: false, error: 'Upload a PDF, JPG, PNG or WEBP file.' }
+  if (file.size > MAX_TRAVEL_DOC_BYTES) return { ok: false, error: 'File is too large (max 10MB).' }
+
+  const db = supabaseAdmin()
+  const rawPassenger = ((formData.get('passenger_id') as string | null) ?? '').trim()
+  let passengerId: string | null = null
+  if (rawPassenger) {
+    const { data: pax } = await db
+      .from('reservation_passengers')
+      .select('id')
+      .eq('id', rawPassenger)
+      .eq('reservation_id', reservationId)
+      .maybeSingle()
+    if (!pax) return { ok: false, error: 'Passenger not found on this booking.' }
+    passengerId = rawPassenger
+  }
+
+  const storagePath = `${reservationId}/${randomUUID()}.${ext}`
+  try {
+    await uploadTravelDocumentToStorage({
+      path: storagePath,
+      buffer: Buffer.from(await file.arrayBuffer()),
+      mimeType: file.type,
+    })
+  } catch (err) {
+    console.error('uploadTravelDocument storage error:', err)
+    return { ok: false, error: 'Could not upload the file.' }
+  }
+
+  const { error } = await db.from('passenger_documents').insert({
+    reservation_id: reservationId,
+    passenger_id: passengerId,
+    doc_type: docType,
+    label,
+    storage_path: storagePath,
+    mime_type: file.type,
+    uploaded_by: admin,
+  })
+  if (error) {
+    console.error('uploadTravelDocument insert error:', error.message)
+    await removeTravelDocumentFromStorage(storagePath).catch(() => {})
+    return { ok: false, error: 'Could not save the document.' }
+  }
+
+  revalidatePath(`/admin/bookings/${reservationId}`)
+  return { ok: true }
+}
+
+export async function deleteTravelDocument(documentId: string): Promise<AdminActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const db = supabaseAdmin()
+  const { data: doc } = await db
+    .from('passenger_documents')
+    .select('reservation_id, storage_path')
+    .eq('id', documentId)
+    .maybeSingle()
+  if (!doc) return { ok: false, error: 'Document not found.' }
+  const row = doc as { reservation_id: string; storage_path: string }
+
+  const { error } = await db.from('passenger_documents').delete().eq('id', documentId)
+  if (error) {
+    console.error('deleteTravelDocument error:', error.message)
+    return { ok: false, error: 'Could not delete the document.' }
+  }
+  await removeTravelDocumentFromStorage(row.storage_path).catch(err =>
+    console.error('deleteTravelDocument storage error:', err)
+  )
+
+  revalidatePath(`/admin/bookings/${row.reservation_id}`)
+  return { ok: true }
+}
+
+export async function createWebinar(formData: FormData): Promise<AdminActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const title = ((formData.get('title') as string | null) ?? '').trim()
+  const description = ((formData.get('description') as string | null) ?? '').trim()
+  const videoUrl = ((formData.get('video_url') as string | null) ?? '').trim()
+  const recordedOn = ((formData.get('recorded_on') as string | null) ?? '').trim()
+
+  if (!title) return { ok: false, error: 'Title is required.' }
+  if (title.length > 200) return { ok: false, error: 'Title must be 200 characters or fewer.' }
+  if (description.length > 4000) return { ok: false, error: 'Description is too long.' }
+  let parsed: URL
+  try {
+    parsed = new URL(videoUrl)
+  } catch {
+    return { ok: false, error: 'Enter a valid video link.' }
+  }
+  if (parsed.protocol !== 'https:') return { ok: false, error: 'Video link must start with https://' }
+  if (recordedOn && !/^\d{4}-\d{2}-\d{2}$/.test(recordedOn)) {
+    return { ok: false, error: 'Invalid recording date.' }
+  }
+
+  const { error } = await supabaseAdmin()
+    .from('webinars')
+    .insert({
+      title,
+      description: description || null,
+      video_url: parsed.toString(),
+      recorded_on: recordedOn || null,
+    })
+  if (error) {
+    console.error('createWebinar error:', error.message)
+    return { ok: false, error: 'Could not add the webinar.' }
+  }
+
+  revalidatePath('/admin/webinars')
+  return { ok: true }
+}
+
+export async function deleteWebinar(webinarId: string): Promise<AdminActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const { error } = await supabaseAdmin().from('webinars').delete().eq('id', webinarId)
+  if (error) {
+    console.error('deleteWebinar error:', error.message)
+    return { ok: false, error: 'Could not delete the webinar.' }
+  }
+
+  revalidatePath('/admin/webinars')
   return { ok: true }
 }

@@ -16,10 +16,10 @@ export default function Navbar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
-  if (pathname?.startsWith('/admin')) return null
+  if (pathname?.startsWith('/admin') || pathname?.startsWith('/portal')) return null
 
   return (
-    <nav className="bg-[#F8F7F3] border-b border-stone-200 sticky top-0 z-50">
+    <nav data-site-chrome className="bg-[#F8F7F3] border-b border-stone-200 sticky top-0 z-50">
       <div className="max-w-5xl mx-auto px-6 flex items-center justify-between h-16">
         <Link href="/" className="flex items-center gap-3">
           <Image
