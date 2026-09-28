@@ -30,17 +30,23 @@ export default async function AdminDocumentsOverview() {
     ((pax ?? []) as Pax[])
       .filter(p => p.reservation_id === r.id)
       .sort((a, b) => a.position - b.position)
-      .map(p => ({ r, p, flight: docsFor(p.id, 'flight_ticket'), visa: docsFor(p.id, 'e_visa') }))
+      .map(p => ({
+        r,
+        p,
+        flight: docsFor(p.id, 'flight_ticket'),
+        visa: docsFor(p.id, 'e_visa'),
+        train: docsFor(p.id, 'train_ticket'),
+      }))
   )
-  const complete = rows.filter(x => x.flight.length > 0 && x.visa.length > 0).length
+  const complete = rows.filter(x => x.flight.length > 0 && x.visa.length > 0 && x.train.length > 0).length
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-bold text-stone-900">Travel documents</h1>
         <p className="text-sm text-stone-500 mt-1">
-          {complete} of {rows.length} passengers have both a flight ticket and a visa. Open each one
-          to check the name matches the passenger.
+          {complete} of {rows.length} passengers have a flight ticket, visa and train ticket. Open
+          each one to check the name matches the passenger.
         </p>
       </div>
 
@@ -52,10 +58,11 @@ export default async function AdminDocumentsOverview() {
               <th className="text-left font-semibold px-4 py-3">Booking</th>
               <th className="text-left font-semibold px-4 py-3">Flight ticket</th>
               <th className="text-left font-semibold px-4 py-3">Visa</th>
+              <th className="text-left font-semibold px-4 py-3">Train ticket</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100">
-            {rows.map(({ r, p, flight, visa }) => (
+            {rows.map(({ r, p, flight, visa, train }) => (
               <tr key={p.id}>
                 <td className="px-4 py-2.5 text-stone-900 whitespace-nowrap">
                   {p.given_names} {p.surname}
@@ -67,6 +74,7 @@ export default async function AdminDocumentsOverview() {
                 </td>
                 <DocCell docs={flight} />
                 <DocCell docs={visa} />
+                <DocCell docs={train} />
               </tr>
             ))}
           </tbody>

@@ -109,7 +109,8 @@ export const ITINERARY: ItineraryDay[] = [
     stay: 'The Address, Jabal Omar',
     events: [
       { kind: 'check-out', hotel: 'Elaf Taiba', city: 'Madinah' },
-      { kind: 'train', time: '12:50', title: 'High-speed train', detail: 'Madinah → Makkah' },
+      { kind: 'train', time: '12:50', title: 'High-speed train', detail: 'Madinah 12:50 → Makkah 15:05 · Economy' },
+      { kind: 'note', time: '15:05', title: 'Arrive Makkah', detail: 'Train tickets are in the Travel Documents tab.' },
       { kind: 'check-in', hotel: 'The Address, Jabal Omar', city: 'Makkah' },
     ],
   },
