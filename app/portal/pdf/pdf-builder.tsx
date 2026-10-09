@@ -34,6 +34,17 @@ const CATEGORIES: Category[] = [
 
 const STORAGE_KEY = 'pdf-builder-v1'
 
+// The finished PDF, kept in memory so it can be saved, shared or opened with a
+// fresh tap. iPhones only allow a download straight after a tap, and building the
+// PDF takes longer than that, so an automatic download can't be relied on there.
+type ReadyPdf = { url: string; name: string; bytes: number; file: File }
+
+const isIOS = () =>
+  typeof navigator !== 'undefined' &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+
+const prettySize = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`)
+
 type Saved = { selected: string[]; title: string; photos: boolean; keyPoints: boolean; mapLinks: boolean }
 
 // Choices are remembered on this device (a convenience only; the page works without it).
@@ -117,6 +128,8 @@ export default function PdfBuilder({
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
+  const [result, setResult] = useState<ReadyPdf | null>(null)
+  const resultRef = useRef<HTMLDivElement>(null)
 
   function update(patch: Partial<Saved>) {
     const next = { ...state, ...patch }
@@ -176,22 +189,30 @@ export default function PdfBuilder({
         failed = merged.failed
       }
 
-      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = fileNameFor(name)
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      const blob = new Blob([bytes], { type: 'application/pdf' })
+      const fileName = fileNameFor(name)
+      const url = URL.createObjectURL(blob)
+      if (result) URL.revokeObjectURL(result.url)
+      setResult({ url, name: fileName, bytes: blob.size, file: new File([blob], fileName, { type: 'application/pdf' }) })
+      setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+
+      // Desktop and Android browsers will download straight away; iPhones need the buttons below.
+      if (!isIOS()) {
+        const a = document.createElement('a')
+        a.href = url
+        a.download = fileName
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+      }
 
       if (failed.length > 0) {
         setError(
-          `Your PDF was saved, but we couldn’t add: ${failed.join(', ')}. Refresh the page and try again, or download them from the Travel Documents tab.`,
+          `Your PDF is ready, but we couldn’t add: ${failed.join(', ')}. Refresh the page and try again, or download them from the Travel Documents tab.`,
         )
         setProgress('')
       } else {
-        setProgress('Done. Your PDF has been saved to your device.')
+        setProgress('Your PDF is ready.')
       }
     } catch (e) {
       console.error(e)
@@ -202,6 +223,16 @@ export default function PdfBuilder({
     }
   }
 
+  async function sharePdf() {
+    if (!result) return
+    try {
+      await navigator.share({ files: [result.file], title: result.name })
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') setError('Sharing didn’t work. Try “Open PDF” instead.')
+    }
+  }
+
+  const canShare = !!result && typeof navigator !== 'undefined' && !!navigator.canShare?.({ files: [result.file] })
   const count = selected.size
 
   return (
@@ -323,6 +354,46 @@ export default function PdfBuilder({
           <Toggle checked={mapLinks} onChange={setMapLinks} label="Include Google Maps links" hint="Links need a connection to open." />
         </div>
       </section>
+
+      {/* Ready */}
+      {result && (
+        <div ref={resultRef} className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6">
+          <p className="text-xs font-bold uppercase tracking-widest text-emerald-800">Your PDF is ready</p>
+          <p className="font-semibold text-stone-900 mt-1 break-all">{result.name}</p>
+          <p className="text-xs text-stone-500">{prettySize(result.bytes)}</p>
+          <div className="flex flex-wrap gap-2 mt-4">
+            {canShare && (
+              <button
+                type="button"
+                onClick={sharePdf}
+                className="inline-flex items-center px-5 py-2.5 rounded-full bg-emerald-700 text-white font-semibold text-sm hover:bg-emerald-800 transition"
+              >
+                Save or Share
+              </button>
+            )}
+            <a
+              href={result.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center px-5 py-2.5 rounded-full bg-[#C4A348] text-white font-semibold text-sm hover:bg-[#b2932e] transition"
+            >
+              Open PDF
+            </a>
+            <a
+              href={result.url}
+              download={result.name}
+              className="inline-flex items-center px-5 py-2.5 rounded-full border border-stone-300 bg-white text-stone-700 font-semibold text-sm hover:border-[#C4A348] transition"
+            >
+              Download
+            </a>
+          </div>
+          <p className="text-xs text-stone-600 mt-3 leading-relaxed">
+            On an iPhone, tap <strong>Save or Share</strong> and choose <strong>Save to Files</strong>, or tap{' '}
+            <strong>Open PDF</strong> and use the share button in Safari. If you are viewing this inside another app
+            (such as WhatsApp or Gmail), open the page in Safari or Chrome first.
+          </p>
+        </div>
+      )}
 
       {/* Create */}
       <div className="sticky bottom-0 -mx-4 sm:mx-0 mt-6 bg-stone-50/95 backdrop-blur border-t sm:border border-stone-200 sm:rounded-2xl px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
