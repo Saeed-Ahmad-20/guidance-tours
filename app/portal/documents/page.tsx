@@ -46,7 +46,7 @@ export default async function PortalDocumentsPage() {
   const people = (passengers ?? []) as Array<{ id: string; given_names: string; surname: string }>
 
   const groups = [
-    { key: 'booking', title: 'Whole booking', docs: rows.filter(d => !d.passenger_id) },
+    { key: 'booking', title: 'Whole Booking', docs: rows.filter(d => !d.passenger_id) },
     ...people.map(p => ({
       key: p.id,
       title: `${p.given_names} ${p.surname}`,
@@ -56,7 +56,7 @@ export default async function PortalDocumentsPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
-      <h1 className="text-2xl font-bold text-stone-900">Travel documents</h1>
+      <h1 className="text-2xl font-bold text-stone-900">Travel Documents</h1>
       <p className="text-sm text-stone-500 mt-1 mb-6">
         Your flight tickets, train tickets and e-visas appear here as soon as our team issues them.
       </p>

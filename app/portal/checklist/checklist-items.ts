@@ -13,7 +13,7 @@ export type ChecklistSection = { title: string; items: ChecklistItem[] }
 
 export const CHECKLIST: ChecklistSection[] = [
   {
-    title: 'Travel documents',
+    title: 'Travel Documents',
     items: [
       { key: 'passport_uploaded', label: 'Passport photo page uploaded to the portal', auto: 'passport_uploaded' },
       { key: 'visa_and_ticket', label: 'E-visa and flight ticket issued', detail: 'Find them in the Travel Documents tab.', auto: 'visa_and_ticket' },
@@ -31,7 +31,7 @@ export const CHECKLIST: ChecklistSection[] = [
     ],
   },
   {
-    title: 'Ihram and clothing',
+    title: 'Ihram and Clothing',
     items: [
       { key: 'ihram', label: 'Men: two ihram sheets and an ihram belt' },
       { key: 'women_clothing', label: 'Women: loose, modest clothing, abayas and hijabs' },
@@ -40,7 +40,7 @@ export const CHECKLIST: ChecklistSection[] = [
     ],
   },
   {
-    title: 'Money and phone',
+    title: 'Money and Phone',
     items: [
       { key: 'riyals', label: 'Some Saudi riyals in cash' },
       { key: 'bank', label: 'Bank card working abroad', detail: 'Check that it will work in Saudi Arabia and is fee-free - example banks include Monzo, Starling Bank, Revolut, etc.' },
@@ -50,7 +50,7 @@ export const CHECKLIST: ChecklistSection[] = [
     ],
   },
   {
-    title: 'Spiritual preparation',
+    title: 'Spiritual Preparation',
     items: [
       { key: 'webinar', label: 'Watched the pre-departure webinar', detail: 'In the Webinars tab.' },
       { key: 'umrah_steps', label: 'Learnt the steps of Umrah' },
@@ -58,7 +58,7 @@ export const CHECKLIST: ChecklistSection[] = [
     ],
   },
   {
-    title: 'Packing and departure',
+    title: 'Packing and Departure',
     items: [
       { key: 'baggage', label: 'Suitcases within 2 × 23kg hold and 7kg cabin' },
         { key: 'itinerary_read', label: 'Read your itinerary', detail: 'Your flight leaves Manchester at 13:30 on Sun 25 Oct.' },

@@ -254,12 +254,12 @@ export default function PortalStatus({
             <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7 mt-5">
               <h2 className="font-semibold text-stone-900 mb-1">
                 {isPartialDeposit
-                  ? 'Sent the remaining deposit?'
+                  ? 'Sent the Remaining Deposit?'
                   : hasReceivedAnything && option === 'custom'
-                  ? 'Sent that amount?'
+                  ? 'Sent That Amount?'
                   : hasReceivedAnything
-                  ? 'Sent the remaining balance?'
-                  : 'Already transferred?'}
+                  ? 'Sent the Remaining Balance?'
+                  : 'Already Transferred?'}
               </h2>
               <p className="text-sm text-stone-500 mb-4">
                 {isPartialDeposit
@@ -300,7 +300,7 @@ export default function PortalStatus({
 
         <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7 mt-5">
           <h2 className="font-semibold text-stone-900 mb-1">
-            {viewer.isLead ? 'Passengers' : 'Your passport'}
+            {viewer.isLead ? 'Passengers' : 'Your Passport'}
           </h2>
           <p className="text-sm text-stone-500 mb-1">
             {viewer.isLead
@@ -450,7 +450,7 @@ function RoomsSection({
   return (
     <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7 mt-5">
       <h2 className="font-semibold text-stone-900 mb-1">
-        {isLead ? (multi ? 'Your rooms' : 'Your room') : 'Your room'}
+        {isLead ? (multi ? 'Your Rooms' : 'Your Room') : 'Your Room'}
       </h2>
       <p className="text-sm text-stone-500 mb-3">
         Who you&apos;ll be sharing with in Madinah and Makkah.
@@ -616,7 +616,7 @@ function ContactEditor({ email, phone }: { email: string; phone: string }) {
 
   return (
     <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7 mt-5">
-      <h2 className="font-semibold text-stone-900 mb-3">Update contact details</h2>
+      <h2 className="font-semibold text-stone-900 mb-3">Update Contact Details</h2>
       <div className="flex flex-col gap-4">
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="text-stone-700 font-medium">Email address</span>

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../lib/supabase-admin'
 import { requirePortalSession } from '../../lib/portal-session'
 import { webinarEmbedUrl } from '../../lib/portal-content'
+import { titleCase } from '../../lib/title-case'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +47,7 @@ export default async function PortalWebinarsPage() {
                   <div className="aspect-video bg-stone-900">
                     <iframe
                       src={embed}
-                      title={w.title}
+                      title={titleCase(w.title)}
                       className="w-full h-full"
                       loading="lazy"
                       allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
@@ -56,7 +57,7 @@ export default async function PortalWebinarsPage() {
                   </div>
                 )}
                 <div className="p-5 sm:p-6">
-                  <h2 className="font-semibold text-stone-900">{w.title}</h2>
+                  <h2 className="font-semibold text-stone-900">{titleCase(w.title)}</h2>
                   {w.recorded_on && (
                     <p className="text-xs text-stone-500 mt-0.5">
                       Recorded{' '}

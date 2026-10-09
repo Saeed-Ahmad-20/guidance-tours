@@ -85,7 +85,7 @@ export const ITINERARY: ItineraryDay[] = [
     city: 'Travel',
     events: [
       { kind: 'flight', time: '13:30', flight: OUT_1 },
-      { kind: 'note', time: '21:50', title: 'Arrive Cairo — connect to Madinah' },
+      { kind: 'note', time: '21:50', title: 'Arrive Cairo — Connect to Madinah' },
     ],
   },
   {
@@ -99,7 +99,15 @@ export const ITINERARY: ItineraryDay[] = [
     ],
   },
   { date: '2026-10-27', title: 'Madinah', city: 'Madinah', stay: 'Elaf Taiba', events: [] },
-  { date: '2026-10-28', title: 'Madinah', city: 'Madinah', stay: 'Elaf Taiba', events: [] },
+  {
+    date: '2026-10-28',
+    title: 'Madinah — Coach Tour',
+    city: 'Madinah',
+    stay: 'Elaf Taiba',
+    events: [
+      { kind: 'note', title: 'Coach Tour of Madinah', detail: 'Pick-up time and meeting point to be confirmed. See the Historical Sites tab for some of the places we visit.' },
+    ],
+  },
   { date: '2026-10-29', title: 'Madinah', city: 'Madinah', stay: 'Elaf Taiba', events: [] },
   { date: '2026-10-30', title: 'Madinah', city: 'Madinah', stay: 'Elaf Taiba', events: [] },
   {
@@ -109,17 +117,25 @@ export const ITINERARY: ItineraryDay[] = [
     stay: 'The Address, Jabal Omar',
     events: [
       { kind: 'check-out', hotel: 'Elaf Taiba', city: 'Madinah' },
-      { kind: 'train', time: '12:50', title: 'High-speed train', detail: 'Madinah 12:50 → Makkah 15:05 · Economy' },
+      { kind: 'train', time: '12:50', title: 'High-Speed Train', detail: 'Madinah 12:50 → Makkah 15:05 · Economy' },
       { kind: 'note', time: '15:05', title: 'Arrive Makkah', detail: 'Train tickets are in the Travel Documents tab.' },
       { kind: 'check-in', hotel: 'The Address, Jabal Omar', city: 'Makkah' },
     ],
   },
   { date: '2026-11-01', title: 'Makkah', city: 'Makkah', stay: 'The Address, Jabal Omar', events: [] },
-  { date: '2026-11-02', title: 'Makkah', city: 'Makkah', stay: 'The Address, Jabal Omar', events: [] },
+  {
+    date: '2026-11-02',
+    title: 'Makkah — Coach Tour',
+    city: 'Makkah',
+    stay: 'The Address, Jabal Omar',
+    events: [
+      { kind: 'note', title: 'Coach Tour of Makkah', detail: 'Pick-up time and meeting point to be confirmed. See the Historical Sites tab for some of the places we visit.' },
+    ],
+  },
   { date: '2026-11-03', title: 'Makkah', city: 'Makkah', stay: 'The Address, Jabal Omar', events: [] },
   {
     date: '2026-11-04',
-    title: 'Return home',
+    title: 'Return Home',
     city: 'Travel',
     notes: 'Early start — the first flight leaves Jeddah at 05:40.',
     events: [

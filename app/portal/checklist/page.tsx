@@ -24,7 +24,7 @@ export default async function PortalChecklistPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
-      <h1 className="text-2xl font-bold text-stone-900">Your checklist</h1>
+      <h1 className="text-2xl font-bold text-stone-900">Your Checklist</h1>
       <p className="text-sm text-stone-500 mt-1 mb-6">
         {firstName ? `${firstName}, tick` : 'Tick'} things off as you get ready. This list is just
         for you and saves automatically.

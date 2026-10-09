@@ -38,7 +38,7 @@ export default function LoginForm({
     <div className="w-full">
       <div className="max-w-md mx-auto px-4 sm:px-6 py-12 sm:py-20">
         <div className="text-center mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-stone-900">Passenger portal</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-stone-900">Passenger Portal</h1>
           <p className="text-stone-500 mt-2 text-sm">
             Every passenger has their own login. Use your booking&apos;s reservation number
             with your own surname and date of birth.

@@ -68,7 +68,7 @@ export default async function PortalItineraryPage() {
         </div>
       </section>
 
-      <h2 className="text-lg font-bold text-stone-900 mt-10 mb-4">Day by day</h2>
+      <h2 className="text-lg font-bold text-stone-900 mt-10 mb-4">Day by Day</h2>
       <ol className="relative border-l-2 border-stone-200 ml-3 flex flex-col gap-5">
         {ITINERARY.map((day, i) => (
           <DayCard key={day.date} day={day} n={i + 1} />
