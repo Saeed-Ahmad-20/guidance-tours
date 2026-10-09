@@ -9,11 +9,17 @@ import {
   FLIGHTS,
   HOTELS,
   ITINERARY,
+  PRAYER_LABELS,
+  PRAYER_NOTE,
+  WEATHER,
+  WEATHER_NOTE,
   hotelMapUrl,
+  prayersForDay,
   type Flight,
   type ItineraryEvent,
 } from '../itinerary/itinerary-data'
 import { SITES, siteMapUrl } from '../historical-sites/sites-data'
+import type { TravelDocType } from '../../lib/portal-content'
 
 // `tag` lets the PDF options switch whole kinds of content on and off.
 export type PdfBlock =
@@ -103,15 +109,40 @@ function tripGroup(): CatalogueGroup {
         ]),
       },
       {
+        id: 'trip-weather',
+        title: 'Weather in Madinah and Makkah',
+        note: 'What to expect',
+        blocks: [
+          ...(Object.keys(WEATHER) as (keyof typeof WEATHER)[]).flatMap<PdfBlock>(city => [
+            { t: 'h', text: city },
+            {
+              t: 'bullets',
+              items: [
+                `Typical daytime high ${WEATHER[city].day}, night low ${WEATHER[city].night}`,
+                WEATHER[city].summary,
+                WEATHER[city].rain,
+              ],
+            },
+          ]),
+          { t: 'p', text: WEATHER_NOTE },
+        ],
+      },
+      {
         id: 'trip-days',
         title: 'Day-by-Day Itinerary',
-        note: `${ITINERARY.length} days`,
-        blocks: ITINERARY.flatMap<PdfBlock>((d, i) => [
-          { t: 'h', text: `Day ${i + 1} · ${dayLabel(d.date)} · ${d.title}` },
-          ...(d.notes ? [{ t: 'p', text: d.notes } as PdfBlock] : []),
-          ...(d.events.length ? [{ t: 'bullets', items: d.events.map(eventLine) } as PdfBlock] : []),
-          ...(d.stay ? [{ t: 'p', text: `Staying at ${d.stay}` } as PdfBlock] : []),
-        ]),
+        note: `${ITINERARY.length} days, with prayer times`,
+        blocks: [
+          { t: 'p', text: PRAYER_NOTE },
+          ...ITINERARY.flatMap<PdfBlock>((d, i) => [
+            { t: 'h', text: `Day ${i + 1} · ${dayLabel(d.date)} · ${d.title}` },
+            ...(d.notes ? [{ t: 'p', text: d.notes } as PdfBlock] : []),
+            ...(d.events.length ? [{ t: 'bullets', items: d.events.map(eventLine) } as PdfBlock] : []),
+            ...prayersForDay(d.date).map<PdfBlock>(({ city, times }) => ({
+              t: 'p',
+              text: `Prayer times, ${city}: ${PRAYER_LABELS.map(n => `${n} ${times[n]}`).join(' · ')}`,
+            })),
+          ]),
+        ],
       },
     ],
   }
@@ -167,6 +198,7 @@ export function buildCatalogue(): CatalogueGroup[] {
 // a short-lived signed link, fetched by the browser when the PDF is made.
 export type AttachableDoc = {
   id: string
+  type: TravelDocType
   label: string
   typeLabel: string
   person: string

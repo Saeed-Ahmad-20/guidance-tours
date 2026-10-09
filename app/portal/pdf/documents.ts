@@ -46,6 +46,7 @@ export async function loadAttachableDocuments({ rid, pid, lead }: PortalSession)
       if (!url) return null
       return {
         id: d.id,
+        type: d.doc_type,
         label: d.label,
         typeLabel: TRAVEL_DOC_TYPE_LABELS[d.doc_type],
         person: d.passenger_id ? (names.get(d.passenger_id) ?? 'Passenger') : 'Whole Booking',

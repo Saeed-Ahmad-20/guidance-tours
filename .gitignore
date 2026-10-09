@@ -47,4 +47,5 @@ next-env.d.ts
 
 # one-off email send log
 /scripts/portal-update-sent.log
+/scripts/portal-whats-new-sent.log
 /Train Tickets/

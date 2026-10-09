@@ -146,3 +146,51 @@ export const ITINERARY: ItineraryDay[] = [
     ],
   },
 ]
+
+// ---- Prayer times and weather -------------------------------------------------
+
+export const PRAYER_LABELS = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const
+export type PrayerName = (typeof PRAYER_LABELS)[number]
+export type PrayerTimes = Record<PrayerName, string>
+export type PrayerCity = 'Madinah' | 'Makkah'
+
+export const PRAYER_NOTE =
+  'Prayer times follow the Umm al-Qura calendar used in Saudi Arabia, in local time. Masjid timetables can differ by a minute or two, so please follow the adhan.'
+
+// Umm al-Qura timings (Asr by the standard method), local time (UTC+3), for the
+// city you are in on each day. To change the dates, regenerate these rows.
+const PRAYER_TIMES: Record<string, Partial<Record<PrayerCity, PrayerTimes>>> = {
+  '2026-10-26': { Madinah: { Fajr: '05:06', Sunrise: '06:25', Dhuhr: '12:06', Asr: '15:21', Maghrib: '17:46', Isha: '19:16' } },
+  '2026-10-27': { Madinah: { Fajr: '05:06', Sunrise: '06:25', Dhuhr: '12:05', Asr: '15:21', Maghrib: '17:45', Isha: '19:15' } },
+  '2026-10-28': { Madinah: { Fajr: '05:07', Sunrise: '06:26', Dhuhr: '12:05', Asr: '15:20', Maghrib: '17:44', Isha: '19:14' } },
+  '2026-10-29': { Madinah: { Fajr: '05:07', Sunrise: '06:26', Dhuhr: '12:05', Asr: '15:20', Maghrib: '17:44', Isha: '19:14' } },
+  '2026-10-30': { Madinah: { Fajr: '05:08', Sunrise: '06:27', Dhuhr: '12:05', Asr: '15:19', Maghrib: '17:43', Isha: '19:13' } },
+  '2026-10-31': { Madinah: { Fajr: '05:08', Sunrise: '06:28', Dhuhr: '12:05', Asr: '15:19', Maghrib: '17:42', Isha: '19:12' }, Makkah: { Fajr: '05:06', Sunrise: '06:23', Dhuhr: '12:04', Asr: '15:21', Maghrib: '17:45', Isha: '19:15' } },
+  '2026-11-01': { Makkah: { Fajr: '05:06', Sunrise: '06:24', Dhuhr: '12:04', Asr: '15:20', Maghrib: '17:45', Isha: '19:15' } },
+  '2026-11-02': { Makkah: { Fajr: '05:06', Sunrise: '06:24', Dhuhr: '12:04', Asr: '15:20', Maghrib: '17:44', Isha: '19:14' } },
+  '2026-11-03': { Makkah: { Fajr: '05:07', Sunrise: '06:25', Dhuhr: '12:04', Asr: '15:20', Maghrib: '17:44', Isha: '19:14' } },
+}
+
+export function prayersForDay(date: string): { city: PrayerCity; times: PrayerTimes }[] {
+  const day = PRAYER_TIMES[date] ?? {}
+  return (Object.keys(day) as PrayerCity[]).map(city => ({ city, times: day[city]! }))
+}
+
+// Typical conditions for 25 Oct - 4 Nov, averaged over the last ten years.
+export const WEATHER_NOTE =
+  'Typical conditions for 25 October to 4 November, averaged over the last ten years. Check the forecast a few days before you fly.'
+
+export const WEATHER: Record<PrayerCity, { day: string; night: string; summary: string; rain: string }> = {
+  Madinah: {
+    day: '34°C',
+    night: '20°C',
+    summary: 'Warm, dry days with pleasant evenings, and cooler mornings around Fajr. Humidity is low, around 35%.',
+    rain: 'Rain is uncommon, on about 1 day in 15, but a shower can occasionally be heavy.',
+  },
+  Makkah: {
+    day: '35°C',
+    night: '24°C',
+    summary: 'Hot and more humid, around 50%, with warm nights. Highs can reach 38°C.',
+    rain: 'Rain falls on about 1 day in 8, usually as a short shower or thunderstorm.',
+  },
+}
