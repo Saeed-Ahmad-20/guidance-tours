@@ -3,6 +3,7 @@
 //   npx tsx scripts/send-portal-whats-new-2.mts --list
 //   npx tsx scripts/send-portal-whats-new-2.mts --preview you@example.com [RESERVATIONCODE]
 //   npx tsx scripts/send-portal-whats-new-2.mts --send-all
+//   npx tsx scripts/send-portal-whats-new-2.mts --schedule-all 2026-10-13T08:00:00Z
 // --preview only ever emails the address you give it, using a real booking's
 // details as the sample. --send-all records each booking it emails in
 // scripts/portal-whats-new-2-sent.log and skips those on a re-run, so running it
@@ -48,7 +49,7 @@ const bookings = data as Booking[]
 const withEmail = bookings.filter(b => b.lead_email?.trim())
 const alreadySent = new Set(existsSync(SENT_LOG) ? readFileSync(SENT_LOG, 'utf8').split(/\r?\n/).filter(Boolean) : [])
 
-async function deliver(b: Booking, to: string, subjectPrefix = '') {
+async function deliver(b: Booking, to: string, subjectPrefix = '', scheduledAt?: string) {
   const element = React.createElement(Email, {
     leadGivenNames: b.lead_given_names.trim(),
     reservationCode: b.reservation_code,
@@ -62,6 +63,7 @@ async function deliver(b: Booking, to: string, subjectPrefix = '') {
     from: FROM,
     replyTo: REPLY_TO,
     to,
+    scheduledAt,
     subject: `${subjectPrefix}Your Umrah guides and the seminar recording are ready — reservation ${b.reservation_code}`,
     html,
     text,
@@ -95,6 +97,28 @@ if (mode === '--list') {
     await new Promise(r => setTimeout(r, 700))
   }
   console.log(`done: ${sent} sent`)
+} else if (mode === '--schedule-all') {
+  // Resend holds each email and sends it at the given UTC time. A booking is logged once queued,
+  // so a re-run never queues it twice. To cancel, use Emails > Scheduled in the Resend dashboard.
+  const at = arg1 && new Date(arg1)
+  if (!at || isNaN(at.getTime()) || at.getTime() < Date.now() + 60_000) {
+    throw new Error('Give a UTC time at least a minute ahead: --schedule-all 2026-10-13T08:00:00Z')
+  }
+  let queued = 0
+  for (const b of withEmail) {
+    if (alreadySent.has(b.reservation_code)) continue
+    try {
+      await deliver(b, b.lead_email!.trim(), '', at.toISOString())
+      appendFileSync(SENT_LOG, `${b.reservation_code}
+`)
+      queued++
+      console.log(`queued ${b.reservation_code}`)
+    } catch (e) {
+      console.log(`FAILED ${b.reservation_code}: ${(e as Error).message}`)
+    }
+    await new Promise(r => setTimeout(r, 700))
+  }
+  console.log(`done: ${queued} queued for ${at.toISOString()}`)
 } else {
-  console.log('usage: --list | --preview <email> [RESERVATIONCODE] | --send-all')
+  console.log('usage: --list | --preview <email> [RESERVATIONCODE] | --send-all | --schedule-all <UTC time>')
 }
