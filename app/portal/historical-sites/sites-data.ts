@@ -44,7 +44,7 @@ export const SITES: CitySites[] = [
           'After arriving in Madinah, the Prophet’s ﷺ camel knelt on a plot of land belonging to two orphans, Sahl and Suhayl. He bought the land and began building a mosque there. He worked alongside the Companions, carrying bricks himself. The first mosque was simple: walls of mud brick, palm trunks for pillars and a roof of palm leaves.',
           'It was more than a place of prayer. It was the centre of the new community, used for learning, for meeting delegations, for consultation and for governance. A raised platform at the back, the Suffah, housed poor Companions known as Ahl as-Suffah, who devoted themselves to learning from the Prophet ﷺ.',
           'The mosque was enlarged by the Prophet ﷺ himself after Khaybar, and later by Umar and Uthman. The Umayyad caliph al-Walid added minarets and a more permanent structure, and the Ottoman sultans rebuilt and decorated it extensively. The Green Dome over the Prophet’s ﷺ chamber dates from the early 19th century and was painted green in 1837.',
-          'The Saudi expansions of the 20th century, especially the major project completed in the 1990s, made it one of the largest mosques in the world, with retractable umbrellas shading the courtyards.',
+          'The Saudi expansions of the 20th century, especially the major project completed in the 1990s, made it one of the largest mosques in the world. The retractable umbrellas that shade the courtyards were added around 2010.',
         ],
         keyFacts: [
           'The Prophet ﷺ said that one prayer in his mosque is better than a thousand prayers elsewhere, except Masjid al-Haram.',
@@ -57,7 +57,7 @@ export const SITES: CitySites[] = [
         name: 'Rawdah Sharif',
         mapQuery: 'Rawdah Sharif, Al-Masjid an-Nabawi, Madinah',
         more: { label: 'Read more on the Rawdah Sharif', anchor: 'rawdah' },
-        year: '11 AH · 632 CE',
+        year: '1 AH · 622 CE',
         image: commons('rawdah', 'آرمین · CC0', 'Green_Dome_of_Al-Masjed_Al-Nabawi.jpg'),
         summary: 'The “garden of Paradise” between the Prophet’s ﷺ house and his minbar.',
         history: [
@@ -81,13 +81,13 @@ export const SITES: CitySites[] = [
         summary: 'The first mosque built in Islam.',
         history: [
           'When the Prophet ﷺ migrated from Makkah, he stopped at Quba on the outskirts of Madinah and stayed several days before entering the city. During that time he laid the foundation of this mosque, and the Companions built it with him.',
-          'Allah refers to it in the Qur’an as a mosque “founded on taqwa from the first day” (9:108). When the Prophet ﷺ left Quba, he rode into Madinah and the people welcomed him with joy.',
-          'The Prophet ﷺ used to visit Quba every week, riding or on foot, and pray two rakats there. The mosque has been rebuilt and expanded many times over the centuries, most recently in the 1980s.',
+          'Many commentators apply Allah’s words “a mosque founded on taqwa from the first day” (9:108) to Quba. A hadith in Muslim applies them to the Prophet’s ﷺ own mosque, and the scholars say both are included. When the Prophet ﷺ left Quba, he rode into Madinah and the people welcomed him with joy.',
+          'The Prophet ﷺ used to visit Quba every week, riding or on foot, and pray two rakats there. The mosque has been rebuilt and expanded many times over the centuries, most notably in the 1980s, and a major expansion has been under way since 2022.',
         ],
         keyFacts: [
           'The Prophet ﷺ said that whoever purifies himself at home, then comes to Masjid Quba and prays in it, has a reward like an Umrah.',
           'The Prophet ﷺ visited Quba every week.',
-          'It is about five kilometres from Masjid an-Nabawi.',
+          'It is about three and a half kilometres from Masjid an-Nabawi.',
         ],
       },
       {
@@ -144,7 +144,7 @@ export const SITES: CitySites[] = [
       {
         name: 'Masjid al-Qiblatayn',
         mapQuery: 'Masjid al-Qiblatayn, Madinah',
-        year: '2 AH · 623 CE',
+        year: '2 AH · 624 CE',
         image: commons('qiblatayn', 'Bintladen · CC BY-SA 4.0', 'Masjid_al-Qiblatayn.jpg'),
         summary: 'The mosque of the two qiblas, where the direction of prayer changed.',
         history: [
@@ -297,7 +297,7 @@ export const SITES: CitySites[] = [
         summary: 'The valley of the Hajj rites and the Jamarat.',
         history: [
           'Mina is a valley a few kilometres east of Makkah. During Hajj, pilgrims stay in its vast tent city and stone the three Jamarat pillars, recalling the moment when Ibrahim ﷺ, commanded to sacrifice his son Ismail ﷺ, rejected the whispers of Shaytan.',
-          'It was also the setting for the pledges of al-Aqabah. In the eleventh, twelfth and thirteenth years of the prophethood, the Prophet ﷺ met men of Madinah here during the Hajj season. They accepted Islam, and in the third pledge, seventy-three men and two women promised to protect him as they would their own families. This led directly to the Hijrah. Masjid al-Bay’ah marks the place.',
+          'It was also the setting for the pledges of al-Aqabah. In the eleventh, twelfth and thirteenth years of the prophethood, the Prophet ﷺ met men of Madinah here during the Hajj season. They accepted Islam, and at the second pledge of al-Aqabah, in the thirteenth year, seventy-three men and two women promised to protect him as they would their own families. This led directly to the Hijrah. Masjid al-Bay’ah marks the place.',
           'In 10 AH, during his only Hajj, the Prophet ﷺ stoned the Jamrat al-Aqabah, sacrificed 63 camels with his own hand, and had his head shaved at Mina.',
         ],
         keyFacts: [
@@ -335,7 +335,7 @@ export const SITES: CitySites[] = [
           'The Prophet ﷺ returned home trembling and said to Khadijah: “Cover me, cover me.” She reassured him, listing his good character, then took him to her cousin Waraqah ibn Nawfal, who recognised the revelation as the same that came to Musa ﷺ.',
         ],
         keyFacts: [
-          'The mountain rises about 640 metres, and the climb is steep and takes some hours.',
+          'The summit is about 640 metres above sea level. The climb is steep, about 270 metres, and usually takes 45 to 90 minutes.',
           'The cave is small, only a few metres long.'
           ],
       },
@@ -351,7 +351,7 @@ export const SITES: CitySites[] = [
           'Today the site is occupied by the Makkah al-Mukarramah Library, established in 1370 AH (1951 CE) by Sheikh Abbas Qattan. The original house is no longer standing.',
         ],
         keyFacts: [
-          'The exact day of birth is disputed, though Monday and Rabi al-Awwal are agreed.',
+          'The exact date is disputed. That it was a Monday is agreed, and the majority place it in Rabi al-Awwal.',
           'It lies a short walk from the Haram, near the Marwa side.',
         ],
       },
@@ -415,7 +415,7 @@ export const SITES: CitySites[] = [
         summary: 'Associated with the jinn who listened to the Prophet ﷺ reciting the Qur’an.',
         history: [
           'The Qur’an tells of a group of jinn who heard the Prophet ﷺ reciting and believed: “Say, [O Muhammad], ‘It has been revealed to me that a group of the jinn listened and said, “Indeed, we have heard a wondrous Qur’an which guides to the right course, so we believed in it.”’” (72:1–2). Surah al-Ahqaf (46:29–32) also refers to this.',
-          'The hadith literature mentions two occasions: on the return from Ta’if, when the Prophet ﷺ was praying Fajr at Nakhlah, and another night when he went out with Abdullah ibn Mas’ud and drew a circle around him. Tradition places the second near al-Hajun, and this mosque is associated with it.',
+          'The hadith literature mentions two occasions: at Nakhlah, when the Prophet ﷺ was leading his Companions in Fajr on the way to the market of Ukaz (Bukhari and Muslim), and another night when he went out with Abdullah ibn Mas’ud and drew a circle around him. Tradition places the second near al-Hajun, and this mosque is associated with it.',
           'The event came during the hardest period of the Prophet’s ﷺ life, after the deaths of Khadijah and Abu Talib and the rejection at Ta’if, and is taken as a sign of Allah’s support.',
         ],
         keyFacts: [

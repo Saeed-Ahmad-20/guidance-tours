@@ -52,7 +52,7 @@ export const HARAMAYN: HaramSection[] = [
       {
         heading: 'Etiquette',
         paragraphs: [
-          'When entering, step in with the right foot and say: “Bismillah, wa-s-salatu wa-s-salamu ala Rasulillah. Allahumma-ftah li abwaba rahmatik.” On first seeing the Ka’bah, it is recommended to make du’a, as this is a time when supplications are accepted. Early scholars, including Sa’id ibn al-Musayyib and Mujahid, are reported to have said that du’a is answered at the sight of the House.',
+          'When entering, step in with the right foot and say: “Bismillah, wa-s-salatu wa-s-salamu ala Rasulillah. Allahumma-ftah li abwaba rahmatik.” On first seeing the Ka’bah, it is recommended to make du’a, as this is a time when supplications are accepted. This is reported from Abu Umamah and from Makhul, in narrations collected by al-Tabarani and al-Bayhaqi. The chains are not strong, but al-Nawawi and the scholars of the four schools recommend it.',
           'Be gentle in the crowds, avoid pushing, lower your gaze, and remember that you are in the House of Allah.',
         ],
       },
@@ -164,9 +164,9 @@ export const HARAMAYN: HaramSection[] = [
         heading: 'History of the Chamber',
         paragraphs: [
           'In the Prophet’s ﷺ time, the chamber was a simple room belonging to Aisha (may Allah be pleased with her), built of palm trunks and mud brick with a roof of palm fronds. Its door opened onto the mosque, and the Prophet ﷺ would put his head out of it to Aisha while he was in i’tikaf. When he passed away in 11 AH, the Companions disagreed about where to bury him, until Abu Bakr narrated that he had heard the Prophet ﷺ say that a prophet is buried where he dies (Tirmidhi and Ibn Majah). The grave was therefore dug in the room itself.',
-          'Abu Bakr was buried beside him in 13 AH, and Umar in 23 AH, with Aisha’s permission. She continued to live in the room, and after Umar was buried there, she began to wear her full covering when she entered. The scholars note that the three graves are arranged side by side, in the order of the Prophet ﷺ, Abu Bakr and Umar.',
+          'Abu Bakr was buried beside him in 13 AH, and Umar in 23 AH, with Aisha’s permission. She continued to live in the room, and after Umar was buried there, she began to wear her full covering when she entered. The reports describe the three graves as staggered rather than side by side, with the Prophet ﷺ in front, then Abu Bakr, then Umar (Abu Dawud, from al-Qasim ibn Muhammad).',
           'In about 88 AH, the governor of Madinah, Umar ibn Abd al-Aziz, incorporated the wives’ rooms into the mosque. He built a five-sided wall around the chamber, deliberately not squared to the qiblah, so that no one could pray facing the grave as if it were the qiblah. A second wall was later built around the first, and the graves are not visible from the mosque.',
-          'It is reported that in the 6th century AH, when a plot to steal the Prophet’s ﷺ body was uncovered, the ruler Nur ad-Din Zangi ordered a trench dug around the chamber and filled with molten lead, so that the graves would be secure. The wooden dome above it was first built by the Mamluk sultan Qalawun in 678 AH, and, after a fire in 886 AH, Sultan Qaytbay rebuilt the chamber and the mosque. The Ottoman sultan Mahmud II built the present dome in 1818 and had it painted green in 1837. The brass grille that visitors face was added by the Ottomans.',
+          'It is reported that in the 6th century AH, when a plot to steal the Prophet’s ﷺ body was uncovered, the ruler Nur ad-Din Zangi ordered a trench dug around the chamber and filled with molten lead, so that the graves would be secure. The wooden dome above it was first built by the Mamluk sultan Qalawun in 678 AH, and, after a fire in 886 AH, Sultan Qaytbay rebuilt the chamber and the mosque. The Ottoman sultan Mahmud II built the present dome in 1818 and had it painted green in 1837. The metal grille that visitors face dates from Sultan Qaytbay’s rebuilding.',
         ],
       },
       {

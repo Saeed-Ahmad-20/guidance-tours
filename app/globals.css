@@ -27,3 +27,53 @@ body {
 body:has([data-portal-shell]) [data-site-chrome] {
   display: none;
 }
+
+/* Portal: smooth expanding sections. Browsers without ::details-content
+   support simply open instantly, as before. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-portal-shell] {
+    interpolate-size: allow-keywords;
+  }
+
+  [data-portal-shell] details::details-content {
+    block-size: 0;
+    overflow: clip;
+    opacity: 0;
+    transition:
+      block-size 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 0.3s ease,
+      content-visibility 0.35s allow-discrete;
+  }
+
+  [data-portal-shell] details[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+
+  /* The chevrons turn at the same pace as the section opens. */
+  [data-portal-shell] .transition-transform {
+    transition-duration: 0.35s;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  [data-portal-shell] a,
+  [data-portal-shell] button {
+    transition-duration: 0.2s;
+  }
+
+  /* The page bar under the category tabs slides in. */
+  .portal-reveal {
+    animation: portal-reveal 0.25s ease-out;
+  }
+
+  @keyframes portal-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

@@ -3,6 +3,7 @@
 //
 // The built-in PDF fonts can't draw the Arabic salutation symbol, so "ﷺ" is
 // written out as "(peace be upon him)" and a few other symbols are simplified.
+// Arabic du'as are drawn by the browser, which shapes Arabic properly, and placed as images.
 
 import { titleCase } from '../../lib/title-case'
 import type { CatalogueGroup, CatalogueItem, PdfBlock } from './catalogue'
@@ -13,10 +14,13 @@ export type PdfOptions = {
   keyPoints: boolean
   mapLinks: boolean
   coverImage?: string
+  arabic?: ArabicRenderer
 }
 
 export type LoadedImage = { data: string; w: number; h: number }
 export type ImageLoader = (src: string) => Promise<LoadedImage | null>
+// Draws Arabic text, wrapped to the given width, as an image.
+export type ArabicRenderer = (text: string, widthMm: number) => Promise<LoadedImage | null>
 
 type RGB = [number, number, number]
 
@@ -81,6 +85,49 @@ export async function browserImageLoader(src: string): Promise<LoadedImage | nul
     return { data, ...size }
   } catch {
     return null
+  }
+}
+
+const AR_PX_PER_MM = 10 // about 250 dpi
+const AR_SIZE_PT = 15
+
+// Renders Arabic right to left in the given font, wrapping on spaces, as a transparent PNG.
+export function browserArabicRenderer(fontFamily: string): ArabicRenderer {
+  return async (text, widthMm) => {
+    try {
+      const px = Math.round(AR_SIZE_PT * 0.3528 * AR_PX_PER_MM)
+      const font = `${px}px ${fontFamily}`
+      await document.fonts.load(font, text)
+      const width = Math.round(widthMm * AR_PX_PER_MM)
+      const pad = Math.round(px * 0.3) // room for the harakat above and below, and at the edges
+      const canvas = document.createElement('canvas')
+      const measure = canvas.getContext('2d')!
+      measure.font = font
+      const lines: string[] = []
+      let line = ''
+      for (const word of text.split(/\s+/)) {
+        const next = line ? `${line} ${word}` : word
+        if (line && measure.measureText(next).width > width - pad * 2) {
+          lines.push(line)
+          line = word
+        } else line = next
+      }
+      if (line) lines.push(line)
+
+      const lineH = px * 1.9
+      canvas.width = width
+      canvas.height = Math.ceil(lines.length * lineH + pad * 2)
+      const ctx = canvas.getContext('2d')! // resizing the canvas resets its state
+      ctx.font = font
+      ctx.direction = 'rtl'
+      ctx.textAlign = 'right'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = `rgb(${INK.join(',')})`
+      lines.forEach((l, i) => ctx.fillText(l, width - pad, pad + lineH * (i + 0.5)))
+      return { data: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height }
+    } catch {
+      return null
+    }
   }
 }
 
@@ -206,12 +253,6 @@ export async function buildPdf(
     }
   }
 
-  function measure(text: string, size: number, width: number, font: 'helvetica' | 'times' = 'helvetica', style: 'normal' | 'bold' | 'italic' = 'normal') {
-    doc.setFont(font, style)
-    doc.setFontSize(size)
-    return (doc.splitTextToSize(sanitize(text), width) as string[]).length
-  }
-
   // ---- images --------------------------------------------------------------
   // Photos can be shrunk so a whole historical site fits on one page.
   let imgScale = 1
@@ -219,15 +260,11 @@ export async function buildPdf(
   let body = 10 // body text size; tightened when a long page needs to fit
   const imgW = () => CW * 0.8 * imgScale
   const fmt = (data: string) => (data.startsWith('data:image/png') ? 'PNG' : 'JPEG')
-  function imageHeight(src?: string) {
-    const img = options.photos && src ? imageCache.get(src) : null
-    return img ? Math.min((imgW() * img.h) / img.w, imgMaxH) + 14 : 0
-  }
-
-  function image(src: string, credit: string) {
+  // `small` is for step illustrations: narrower and never taller than 62mm, captioned rather than credited.
+  function image(src: string, credit: string, small = false) {
     const img = imageCache.get(src)
     if (!img) return
-    const width = imgW()
+    const width = small ? Math.min(imgW() * 0.72, (62 * img.w) / img.h) : imgW()
     const natural = (width * img.h) / img.w
     const height = Math.min(natural, imgMaxH)
     ensure(height + 14)
@@ -250,7 +287,7 @@ export async function buildPdf(
     doc.setFont('helvetica', 'italic')
     doc.setFontSize(7)
     setColor(MUTED)
-    doc.text(`Photo: ${sanitize(credit)}`, PAGE_W / 2, y + 2, { align: 'center' })
+    doc.text(small ? sanitize(credit) : `Photo: ${sanitize(credit)}`, PAGE_W / 2, y + 2, { align: 'center' })
     y += 7
   }
 
@@ -361,6 +398,17 @@ export async function buildPdf(
     y += 11
   }
 
+  // Arabic is pre-rendered (see below); the same du'a reuses one image in the file.
+  const arabicCache = new Map<string, { img: LoadedImage; alias: string }>()
+  function arabic(text: string) {
+    const ar = arabicCache.get(text)
+    if (!ar) return
+    const height = (CW * ar.img.h) / ar.img.w
+    ensure(height + 2)
+    doc.addImage(ar.img.data, 'PNG', M, y, CW, height, ar.alias, 'FAST')
+    y += height + 2
+  }
+
   function block(b: DrawBlock) {
     switch (b.t) {
       case 'h':
@@ -375,6 +423,10 @@ export async function buildPdf(
         return linkRow(b.links)
       case 'link':
         return linkRow([{ label: b.label, url: b.url }])
+      case 'img':
+        return image(b.src, b.caption, true)
+      case 'ar':
+        return arabic(b.text)
     }
   }
 
@@ -383,6 +435,7 @@ export async function buildPdf(
     const keep = blocks.filter(b => {
       if (b.t === 'bullets' && b.tag === 'keypoints') return options.keyPoints
       if (b.t === 'link' && b.tag === 'map') return options.mapLinks
+      if (b.t === 'img') return options.photos
       return true
     })
     const pruned = keep.filter((b, i) => b.t !== 'h' || (keep[i + 1] && keep[i + 1].t !== 'h'))
@@ -406,6 +459,16 @@ export async function buildPdf(
     let description = g.description ?? ''
     if (g.id === 'trip') {
       description = 'Your flights, hotels and the plan for each day of your journey.'
+    } else if (g.id.startsWith('umrah-')) {
+      key = 'umrah'
+      title = 'Umrah Guide'
+      description = 'Step by step: preparing, ihram, tawaf, sa’ee and the haircut.'
+    } else if (g.id.startsWith('beloved-')) {
+      key = 'beloved'
+      title = 'The Beloved’s ﷺ Home'
+      description = 'The etiquette of Madinah, and visiting the Prophet ﷺ, Abu Bakr and Umar.'
+    } else if (g.id === 'duas') {
+      description = 'Du’as for Makkah and Madinah, and when to read each one.'
     } else if (g.id.startsWith('haramayn-')) {
       key = 'haramayn'
       title = 'The Haramayn'
@@ -501,9 +564,6 @@ export async function buildPdf(
     y += 5
   }
 
-  const itemHeadNeed = (it: CatalogueItem) =>
-    14 + measure(it.title, 18, CW, 'times', 'bold') * lineHeight(18, 1.25) + (it.year ? 8 : 0) + (imageHeight(it.image?.src) || 22)
-
   // ---- preload photos -------------------------------------------------------
   imageCache.set(MARK, await loadImage(MARK))
   imageCache.set(EMBLEM, await loadImage(EMBLEM))
@@ -514,8 +574,18 @@ export async function buildPdf(
       for (const it of g.items) {
         if (it.image) srcs.add(it.image.src)
         if (it.section?.image) srcs.add(it.section.image.src)
+        for (const b of it.blocks) if (b.t === 'img') srcs.add(b.src)
       }
     await Promise.all([...srcs].map(async src => imageCache.set(src, await loadImage(src))))
+  }
+  if (options.arabic) {
+    const texts = new Set<string>()
+    for (const g of groups) for (const it of g.items) for (const b of it.blocks) if (b.t === 'ar') texts.add(b.text)
+    let n = 0
+    for (const text of texts) {
+      const img = await options.arabic(text, CW)
+      if (img) arabicCache.set(text, { img, alias: `ar-${n++}` })
+    }
   }
 
   // ---- contents layout (written last, once page numbers are known) -----------
@@ -524,7 +594,7 @@ export async function buildPdf(
   for (const c of chapters) {
     entries.push({ kind: 'chapter', label: c.title, key: `chapter:${c.key}` })
     for (const g of c.groups) {
-      if (c.groups.length > 1) entries.push({ kind: 'section', label: g.title.replace(/^The Haramayn: /, ''), key: g.id })
+      if (c.groups.length > 1) entries.push({ kind: 'section', label: g.title.replace(/^(The Haramayn|Umrah Guide): /, ''), key: g.id })
       for (const it of g.items) entries.push({ kind: 'item', label: it.title, key: it.id })
     }
   }
@@ -621,7 +691,7 @@ export async function buildPdf(
       const lead0 = g.items[0]
 
       if (c.groups.length > 1) {
-        band(g.title.replace(/^The Haramayn: /, ''))
+        band(g.title.replace(/^(The Haramayn|Umrah Guide): /, ''))
         if (lead0?.section) {
           lead(lead0.section.intro)
           if (options.photos && lead0.section.image) image(lead0.section.image.src, lead0.section.image.credit)
@@ -634,7 +704,7 @@ export async function buildPdf(
         for (const b of visibleBlocks(item.blocks)) block(b)
       }
 
-      for (const item of g.items) {
+      for (const [index, item] of g.items.entries()) {
         if (singlePage) {
           // Every site gets its own page. Shrink (then drop) the photo until it all fits.
           const before = doc.getNumberOfPages()
@@ -667,7 +737,23 @@ export async function buildPdf(
           imgMaxH = Infinity
           body = 10
         } else {
-          ensure(itemHeadNeed(item))
+          if (index === 0) {
+            // The first item of a section follows its heading, and may run on to the next page.
+            ensure(40)
+          } else {
+            // Keep the item on this page only if it starts and finishes here; otherwise it starts a
+            // new page. A trial draw on a scratch page, at the same height, tells us which.
+            const startPage = page()
+            const startY = y
+            newPage()
+            y = startY
+            drawItem(item, true)
+            const fits = doc.getNumberOfPages() === startPage + 1
+            for (let pn = doc.getNumberOfPages(); pn > startPage; pn--) doc.deletePage(pn)
+            doc.setPage(startPage)
+            y = startY
+            if (!fits) newPage()
+          }
           pageOf.set(item.id, page())
           drawItem(item, true)
           y += 6

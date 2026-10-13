@@ -1,7 +1,11 @@
 'use client'
 
+import { Amiri } from 'next/font/google'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { AttachableDoc, CatalogueGroup } from './catalogue'
+
+// Naskh font for the Arabic du'as in the PDF. It downloads only when a PDF is made.
+const amiri = Amiri({ weight: '400', subsets: ['arabic'], display: 'swap', preload: false })
 
 type Category = { key: string; title: string; blurb: string; accent: string; ring: string; chip: string }
 
@@ -15,12 +19,28 @@ const CATEGORIES: Category[] = [
     chip: 'bg-amber-100 text-amber-900',
   },
   {
-    key: 'sites',
-    title: 'Historical Sites',
-    blurb: 'Places from the seerah in Madinah and Makkah.',
-    accent: 'border-l-emerald-600',
-    ring: 'accent-emerald-700',
-    chip: 'bg-emerald-100 text-emerald-800',
+    key: 'beloved',
+    title: 'The Beloved’s ﷺ Home',
+    blurb: 'The etiquette of Madinah, and visiting the Prophet ﷺ.',
+    accent: 'border-l-[#C4A348]',
+    ring: 'accent-[#C4A348]',
+    chip: 'bg-amber-100 text-amber-900',
+  },
+  {
+    key: 'umrah',
+    title: 'Umrah Guide',
+    blurb: 'Step by step: preparing, ihram, tawaf, sa’ee and the haircut.',
+    accent: 'border-l-[#C4A348]',
+    ring: 'accent-[#C4A348]',
+    chip: 'bg-amber-100 text-amber-900',
+  },
+  {
+    key: 'duas',
+    title: 'Duas for Your Journey',
+    blurb: 'Du’as for Makkah and Madinah, and when to read each one.',
+    accent: 'border-l-[#C4A348]',
+    ring: 'accent-[#C4A348]',
+    chip: 'bg-amber-100 text-amber-900',
   },
   {
     key: 'haramayn',
@@ -29,6 +49,14 @@ const CATEGORIES: Category[] = [
     accent: 'border-l-[#8a6e1f]',
     ring: 'accent-[#8a6e1f]',
     chip: 'bg-amber-100 text-amber-900',
+  },
+  {
+    key: 'sites',
+    title: 'Historical Sites',
+    blurb: 'Places from the seerah in Madinah and Makkah.',
+    accent: 'border-l-emerald-600',
+    ring: 'accent-emerald-700',
+    chip: 'bg-emerald-100 text-emerald-800',
   },
 ]
 
@@ -159,7 +187,7 @@ export default function PdfBuilder({
     setBusy(true)
     setProgress('Preparing…')
     try {
-      const { buildPdf, browserImageLoader, fileNameFor } = await import('./make-pdf')
+      const { buildPdf, browserImageLoader, browserArabicRenderer, fileNameFor } = await import('./make-pdf')
       const chosen = contentGroups
         .map(g => ({ ...g, items: g.items.filter(i => selected.has(i.id)) }))
         .filter(g => g.items.length > 0)
@@ -171,7 +199,14 @@ export default function PdfBuilder({
         chosen.length > 0
           ? await buildPdf(
               chosen,
-              { title: name, photos, keyPoints, mapLinks, coverImage: '/images/sites/kaabah.jpg' },
+              {
+                title: name,
+                photos,
+                keyPoints,
+                mapLinks,
+                coverImage: '/images/sites/kaabah.jpg',
+                arabic: browserArabicRenderer(amiri.style.fontFamily),
+              },
               browserImageLoader,
               (done, total) => setProgress(`Building… ${done} of ${total}`),
             )
@@ -242,6 +277,13 @@ export default function PdfBuilder({
         <span className="text-xs font-bold uppercase tracking-widest text-stone-500 mr-1">Quick Pick</span>
         <PickButton onClick={() => setSelected(new Set(allIds))}>Everything</PickButton>
         <PickButton onClick={() => setSelected(new Set(defaultIds))}>Trip essentials</PickButton>
+        <PickButton
+          onClick={() =>
+            setSelected(new Set(groups.filter(g => g.id.startsWith('umrah-')).flatMap(g => g.items.map(i => i.id))))
+          }
+        >
+          Umrah guide
+        </PickButton>
         <PickButton
           onClick={() =>
             setSelected(new Set(groups.filter(g => g.id.startsWith('sites-') || g.id.startsWith('haramayn-')).flatMap(g => g.items.map(i => i.id))))

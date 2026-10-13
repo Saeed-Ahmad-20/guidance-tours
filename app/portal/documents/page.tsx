@@ -103,6 +103,24 @@ export default async function PortalDocumentsPage() {
           ))}
         </div>
       )}
+
+      <section className="mt-5 bg-white rounded-2xl border border-stone-200 p-5 sm:p-6">
+        <h2 className="font-semibold text-stone-900 mb-3">Guidance Tours</h2>
+        <div className="flex items-center justify-between gap-4 text-sm">
+          <div className="min-w-0">
+            <p className="text-stone-900">Terms &amp; Conditions</p>
+            <p className="text-xs text-stone-500">Umrah booking terms, including our no-show policy · PDF</p>
+          </div>
+          <a
+            href="/Guidance_Tours_Umrah_Terms_and_Conditions.pdf"
+            target="_blank"
+            rel="noreferrer"
+            className="shrink-0 inline-flex items-center px-4 py-2 rounded-full bg-[#C4A348] text-white font-semibold text-xs hover:bg-[#b2932e] transition"
+          >
+            Open ↗
+          </a>
+        </div>
+      </section>
     </div>
   )
 }

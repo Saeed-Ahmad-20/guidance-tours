@@ -19,6 +19,9 @@ import {
   type ItineraryEvent,
 } from '../itinerary/itinerary-data'
 import { SITES, siteMapUrl } from '../historical-sites/sites-data'
+import { BELOVEDS_HOME } from '../beloveds-home/beloveds-home-data'
+import { DUAS } from '../duas/duas-data'
+import { UMRAH_GUIDE, type UmrahPart } from '../umrah-guide/umrah-guide-data'
 import type { TravelDocType } from '../../lib/portal-content'
 
 // `tag` lets the PDF options switch whole kinds of content on and off.
@@ -28,6 +31,8 @@ export type PdfBlock =
   | { t: 'p'; text: string }
   | { t: 'bullets'; items: string[]; tag?: 'keypoints' }
   | { t: 'link'; label: string; url: string; tag?: 'map' }
+  | { t: 'img'; src: string; caption: string }
+  | { t: 'ar'; text: string } // Arabic, drawn as an image since the PDF fonts can't shape it
 
 export type PdfImage = { src: string; credit: string }
 
@@ -172,7 +177,9 @@ function sitesGroups(): CatalogueGroup[] {
 }
 
 function haramaynGroups(): CatalogueGroup[] {
-  return HARAMAYN.map(section => ({
+  // Madinah's sections first, to match the trip.
+  const ordered = [...HARAMAYN].sort((a, b) => (a.city === b.city ? 0 : a.city === 'Madinah' ? -1 : 1))
+  return ordered.map(section => ({
     id: `haramayn-${section.id}`,
     title: `The Haramayn: ${section.title}`,
     description: section.intro,
@@ -190,8 +197,63 @@ function haramaynGroups(): CatalogueGroup[] {
   }))
 }
 
+function duaGroup(): CatalogueGroup {
+  return {
+    id: 'duas',
+    title: 'Duas for Your Journey',
+    description: 'Du’as for Makkah and Madinah, and when to read each one.',
+    items: DUAS.map(section => ({
+      id: `duas-${section.id}`,
+      title: section.title,
+      section: { id: section.id, title: section.title, intro: section.blurb },
+      blocks: [
+        ...(section.duas ?? []).flatMap<PdfBlock>(d => [
+          { t: 'h', text: d.label },
+          { t: 'p', text: `When and why: ${d.when}` },
+          { t: 'ar', text: d.arabic },
+          { t: 'p', text: d.transliteration },
+          { t: 'p', text: d.translation },
+        ]),
+        ...(section.bullets ? [{ t: 'bullets', items: section.bullets } as PdfBlock] : []),
+      ],
+    })),
+  }
+}
+
+function guideGroups(parts: UmrahPart[], prefix: string, label: string): CatalogueGroup[] {
+  return parts.map(part => ({
+    id: `${prefix}-${part.id}`,
+    title: `${label}: ${part.title}`,
+    description: part.blurb,
+    items: part.steps.map((step, i) => ({
+      id: `${prefix}-${part.id}-${i}`,
+      title: step.heading,
+      section: { id: part.id, title: part.title, intro: part.blurb },
+      blocks: [
+        ...(step.images ?? []).map<PdfBlock>(i => ({ t: 'img', src: i.src, caption: i.credit ? `${i.alt} (${i.credit})` : i.alt })),
+        ...(step.paragraphs ?? []).map<PdfBlock>(text => ({ t: 'p', text })),
+        ...(step.bullets ? [{ t: 'bullets', items: step.bullets } as PdfBlock] : []),
+        ...(step.duas ?? []).flatMap<PdfBlock>(d => [
+          { t: 'h', text: d.label },
+          { t: 'ar', text: d.arabic },
+          { t: 'p', text: d.transliteration },
+          { t: 'p', text: d.translation },
+        ]),
+      ],
+    })),
+  }))
+}
+
 export function buildCatalogue(): CatalogueGroup[] {
-  return [tripGroup(), ...sitesGroups(), ...haramaynGroups()]
+  return [
+    // In the order of the trip: Madinah first, then Makkah.
+    tripGroup(),
+    ...guideGroups(BELOVEDS_HOME, 'beloved', 'The Beloved’s Home'),
+    ...guideGroups(UMRAH_GUIDE, 'umrah', 'Umrah Guide'),
+    duaGroup(),
+    ...haramaynGroups(),
+    ...sitesGroups(),
+  ]
 }
 
 // A travel document the signed-in passenger may attach to their PDF. The url is
