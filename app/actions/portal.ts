@@ -160,6 +160,61 @@ export async function updateLeadContact(email: string, phone: string): Promise<U
   return { ok: true }
 }
 
+// A passenger can change their own contact details; the lead passenger can change anyone's
+// on the booking. The lead's details are also the booking's contact, so they are kept in step.
+export async function updatePassengerContact(
+  passengerId: string,
+  email: string,
+  phone: string
+): Promise<UpdateContactResult> {
+  await assertSameOrigin()
+  const session = await getPortalSession()
+  if (!session) return { ok: false, error: 'Your session has expired. Please log in again.' }
+  if (!session.lead && passengerId !== session.pid) {
+    return { ok: false, error: 'You can only change your own contact details.' }
+  }
+
+  const trimmedEmail = email.trim()
+  const trimmedPhone = phone.trim()
+  if (trimmedEmail && !isValidEmail(trimmedEmail)) {
+    return { ok: false, error: 'Please enter a valid email address.' }
+  }
+  if (trimmedEmail.length > 254 || trimmedPhone.length > 40) {
+    return { ok: false, error: 'That is too long. Please check and try again.' }
+  }
+
+  const db = supabaseAdmin()
+  const { data: rows, error: readErr } = await db
+    .from('reservation_passengers')
+    .select('id')
+    .eq('reservation_id', session.rid)
+    .order('position', { ascending: true })
+  if (readErr || !rows) return { ok: false, error: 'Could not update contact details.' }
+  const ids = (rows as Array<{ id: string }>).map(r => r.id)
+  if (!ids.includes(passengerId)) return { ok: false, error: 'Passenger not found.' }
+
+  const { error } = await db
+    .from('reservation_passengers')
+    .update({ email: trimmedEmail || null, phone: trimmedPhone || null })
+    .eq('id', passengerId)
+    .eq('reservation_id', session.rid)
+  if (error) {
+    console.error('updatePassengerContact error:', error.message)
+    return { ok: false, error: 'Could not update contact details.' }
+  }
+
+  if (passengerId === ids[0]) {
+    const { error: leadErr } = await db
+      .from('reservations')
+      .update({ lead_email: trimmedEmail || null, lead_phone: trimmedPhone || null })
+      .eq('id', session.rid)
+    if (leadErr) console.error('updatePassengerContact lead error:', leadErr.message)
+  }
+
+  revalidatePath('/portal')
+  return { ok: true }
+}
+
 export type MarkDepositResult =
   | { ok: true }
   | { ok: false; error: string }

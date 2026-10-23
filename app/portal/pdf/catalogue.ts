@@ -2,6 +2,7 @@
 // people pick from and turn into a PDF. Built on the server so the content only
 // reaches signed-in passengers.
 
+import { formatUpdated, type DayForecast, type Forecasts } from '../itinerary/forecast'
 import { HARAMAYN } from '../haramayn/haramayn-data'
 import {
   AIRLINE,
@@ -9,12 +10,11 @@ import {
   FLIGHTS,
   HOTELS,
   ITINERARY,
-  PRAYER_LABELS,
   PRAYER_NOTE,
   WEATHER,
   WEATHER_NOTE,
   hotelMapUrl,
-  prayersForDay,
+  eventsWithPrayers,
   type Flight,
   type ItineraryEvent,
 } from '../itinerary/itinerary-data'
@@ -68,6 +68,8 @@ function eventLine(e: ItineraryEvent): string {
       return `${time}Check in: ${e.hotel}, ${e.city}`
     case 'check-out':
       return `${time}Check out: ${e.hotel}, ${e.city}`
+    case 'prayer':
+      return `${time}${e.name} prayer`
     default:
       return `${time}${e.title}${e.detail ? `: ${e.detail}` : ''}`
   }
@@ -81,7 +83,11 @@ const dayLabel = (iso: string) =>
     timeZone: 'UTC',
   })
 
-function tripGroup(): CatalogueGroup {
+const weatherLine = (f: DayForecast) =>
+  `Daytime ${f.day.temp}°C, ${f.day.summary.toLowerCase()}, ${f.day.rainChance}% chance of rain · Night ${f.night.temp}°C, ${f.night.summary.toLowerCase()}, ${f.night.rainChance}% chance of rain`
+
+function tripGroup(forecasts: Forecasts): CatalogueGroup {
+  const updated = forecasts.updatedAt ? `Forecast last updated ${formatUpdated(forecasts.updatedAt)}.` : ''
   return {
     id: 'trip',
     title: 'Your Trip',
@@ -109,6 +115,7 @@ function tripGroup(): CatalogueGroup {
         blocks: HOTELS.flatMap<PdfBlock>(h => [
           { t: 'h', text: `${h.city}: ${h.name}` },
           { t: 'p', text: `${h.from} to ${h.to} · ${h.nights} nights · ${h.extras}` },
+          { t: 'p', text: `Breakfast: ${h.breakfast}` },
           { t: 'link', label: 'Hotel website', url: h.website },
           { t: 'link', label: 'View on Google Maps', url: hotelMapUrl(h.mapQuery), tag: 'map' },
         ]),
@@ -130,6 +137,7 @@ function tripGroup(): CatalogueGroup {
             },
           ]),
           { t: 'p', text: WEATHER_NOTE },
+          ...(updated ? [{ t: 'p', text: updated } as PdfBlock] : []),
         ],
       },
       {
@@ -137,15 +145,14 @@ function tripGroup(): CatalogueGroup {
         title: 'Day-by-Day Itinerary',
         note: `${ITINERARY.length} days, with prayer times`,
         blocks: [
-          { t: 'p', text: PRAYER_NOTE },
+          { t: 'p', text: [PRAYER_NOTE, updated].filter(Boolean).join(' ') },
           ...ITINERARY.flatMap<PdfBlock>((d, i) => [
             { t: 'h', text: `Day ${i + 1} · ${dayLabel(d.date)} · ${d.title}` },
+            ...(d.city !== 'Travel' && forecasts.byCity[d.city][d.date]
+              ? [{ t: 'p', text: `Weather: ${weatherLine(forecasts.byCity[d.city][d.date])}` } as PdfBlock]
+              : []),
             ...(d.notes ? [{ t: 'p', text: d.notes } as PdfBlock] : []),
-            ...(d.events.length ? [{ t: 'bullets', items: d.events.map(eventLine) } as PdfBlock] : []),
-            ...prayersForDay(d.date).map<PdfBlock>(({ city, times }) => ({
-              t: 'p',
-              text: `Prayer times, ${city}: ${PRAYER_LABELS.map(n => `${n} ${times[n]}`).join(' · ')}`,
-            })),
+            ...(d.events.length ? [{ t: 'bullets', items: eventsWithPrayers(d).map(eventLine) } as PdfBlock] : []),
           ]),
         ],
       },
@@ -244,10 +251,10 @@ function guideGroups(parts: UmrahPart[], prefix: string, label: string): Catalog
   }))
 }
 
-export function buildCatalogue(): CatalogueGroup[] {
+export function buildCatalogue(forecasts: Forecasts): CatalogueGroup[] {
   return [
     // In the order of the trip: Madinah first, then Makkah.
-    tripGroup(),
+    tripGroup(forecasts),
     ...guideGroups(BELOVEDS_HOME, 'beloved', 'The Beloved’s Home'),
     ...guideGroups(UMRAH_GUIDE, 'umrah', 'Umrah Guide'),
     duaGroup(),

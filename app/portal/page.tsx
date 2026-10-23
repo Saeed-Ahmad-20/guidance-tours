@@ -25,7 +25,7 @@ async function loadReservation(rid: string): Promise<PortalReservation | null> {
 
   const { data: passengers } = await db
     .from('reservation_passengers')
-    .select('id, given_names, surname, person_type, room_type, room_index, passport_expiry, passport_renewal_required, passport_photo_uploaded_at, passport_photo_path')
+    .select('id, given_names, surname, email, phone, person_type, room_type, room_index, passport_expiry, passport_renewal_required, passport_photo_uploaded_at, passport_photo_path')
     .eq('reservation_id', rid)
     .order('position', { ascending: true })
 
@@ -38,6 +38,8 @@ async function loadReservation(rid: string): Promise<PortalReservation | null> {
     id: string
     given_names: string
     surname: string
+    email: string | null
+    phone: string | null
     person_type: 'adult' | 'infant'
     room_type: 'quad' | 'triple' | 'double'
     room_index: number
@@ -48,8 +50,11 @@ async function loadReservation(rid: string): Promise<PortalReservation | null> {
   }>
 
   const withPhotoUrls = await Promise.all(
-    rawPassengers.map(async p => ({
+    rawPassengers.map(async (p, i) => ({
       ...p,
+      // The lead passenger's details are the booking's contact details.
+      email: p.email ?? (i === 0 ? row.lead_email : null),
+      phone: p.phone ?? (i === 0 ? row.lead_phone : null),
       passport_photo_url: p.passport_photo_path
         ? await getPassportPhotoSignedUrl(p.passport_photo_path)
         : null,

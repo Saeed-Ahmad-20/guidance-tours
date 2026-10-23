@@ -1,19 +1,19 @@
 import { requirePortalSession } from '../../lib/portal-session'
 import type { AttachableDoc } from '../pdf/catalogue'
 import { loadAttachableDocuments } from '../pdf/documents'
+import { formatUpdated, loadForecasts, type DayForecast, type PeriodForecast } from './forecast'
 import {
   AIRLINE,
   BAGGAGE,
   FLIGHTS,
   HOTELS,
   ITINERARY,
-  PRAYER_LABELS,
   PRAYER_NOTE,
   WEATHER,
   WEATHER_NOTE,
   hotelByName,
+  eventsWithPrayers,
   hotelMapUrl,
-  prayersForDay,
   type Flight,
   type ItineraryDay,
   type ItineraryEvent,
@@ -27,6 +27,7 @@ const dayFmt = (iso: string, opts: Intl.DateTimeFormatOptions) =>
 export default async function PortalItineraryPage() {
   const session = await requirePortalSession()
   const docs = await loadAttachableDocuments(session)
+  const { byCity: forecasts, updatedAt } = await loadForecasts(ITINERARY[0].date, ITINERARY[ITINERARY.length - 1].date)
   const first = ITINERARY[0].date
   const last = ITINERARY[ITINERARY.length - 1].date
   const nights = HOTELS.reduce((n, h) => n + h.nights, 0)
@@ -55,6 +56,7 @@ export default async function PortalItineraryPage() {
               <p className="text-xs text-stone-400 mt-1">
                 {h.from} – {h.to} · {h.nights} nights · {h.extras}
               </p>
+              <p className="text-xs text-stone-400 mt-1">Breakfast: {h.breakfast}</p>
               <div className="flex gap-4 mt-3 text-xs font-semibold">
                 <a href={h.website} target="_blank" rel="noreferrer" className="text-[#C4A348] hover:underline">
                   Hotel website ↗
@@ -85,15 +87,24 @@ export default async function PortalItineraryPage() {
       <p className="text-xs text-stone-400 mt-3">{WEATHER_NOTE}</p>
 
       <h2 className="text-lg font-bold text-stone-900 mt-10 mb-1">Day by Day</h2>
-      <p className="text-xs text-stone-500 mb-4">{PRAYER_NOTE}</p>
+      <p className="text-xs text-stone-500 mb-4">
+        {PRAYER_NOTE}
+        {updatedAt && ` Forecast last updated ${formatUpdated(updatedAt)}.`}
+      </p>
       <ol className="relative border-l-2 border-stone-200 ml-3 flex flex-col gap-5">
         {ITINERARY.map((day, i) => (
-          <DayCard key={day.date} day={day} n={i + 1} docs={docs} />
+          <DayCard
+            key={day.date}
+            day={day}
+            n={i + 1}
+            docs={docs}
+            forecast={day.city === 'Travel' ? undefined : forecasts[day.city][day.date]}
+          />
         ))}
       </ol>
 
       <p className="text-xs text-stone-400 text-center mt-10">
-        All times are local. More detail for each day will be added here before departure.
+        All times are local. Daily forecasts update every 12 hours. More detail for each day will be added here before departure.
       </p>
     </div>
   )
@@ -123,31 +134,6 @@ function WeatherCard({ city }: { city: keyof typeof WEATHER }) {
       <p className="text-sm text-stone-700 mt-3 leading-relaxed">{w.summary}</p>
       <p className="text-sm text-stone-700 mt-2 leading-relaxed">{w.rain}</p>
     </article>
-  )
-}
-
-function PrayerTimesStrip({ date }: { date: string }) {
-  const rows = prayersForDay(date)
-  if (rows.length === 0) return null
-  return (
-    <div className="mt-3 flex flex-col gap-2">
-      {rows.map(({ city, times }) => {
-        const c = CITY_PANEL[city]
-        return (
-          <div key={city} className={`rounded-xl border p-3 ${c.box}`}>
-            <p className={`text-[11px] font-bold uppercase tracking-widest ${c.label}`}>Prayer Times · {city}</p>
-            <dl className="mt-2 grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
-              {PRAYER_LABELS.map(name => (
-                <div key={name}>
-                  <dt className="text-[11px] text-stone-500">{name}</dt>
-                  <dd className={`text-sm font-semibold font-mono ${c.value}`}>{times[name]}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        )
-      })}
-    </div>
   )
 }
 
@@ -181,7 +167,18 @@ const CITY_CHIP: Record<ItineraryDay['city'], string> = {
   Makkah: 'bg-amber-50 text-amber-800',
 }
 
-function DayCard({ day, n, docs }: { day: ItineraryDay; n: number; docs: AttachableDoc[] }) {
+function DayCard({
+  day,
+  n,
+  docs,
+  forecast,
+}: {
+  day: ItineraryDay
+  n: number
+  docs: AttachableDoc[]
+  forecast?: DayForecast
+}) {
+  const events = eventsWithPrayers(day)
   return (
     <li className="ml-6">
       <span className="absolute -left-[9px] mt-5 w-4 h-4 rounded-full bg-white border-2 border-[#C4A348]" />
@@ -198,19 +195,41 @@ function DayCard({ day, n, docs }: { day: ItineraryDay; n: number; docs: Attacha
           </span>
         </div>
 
+        {forecast && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <ForecastPeriod label="Daytime" tone="bg-sky-50 border-sky-200 text-sky-950" p={forecast.day} />
+            <ForecastPeriod label="Night" tone="bg-indigo-50 border-indigo-200 text-indigo-950" p={forecast.night} />
+          </div>
+        )}
+
         {day.notes && <p className="text-sm text-stone-600 mt-2 leading-relaxed">{day.notes}</p>}
 
-        {day.events.length > 0 && (
+        {events.length > 0 && (
           <ul className="mt-3 flex flex-col divide-y divide-stone-100">
-            {day.events.map((e, i) => (
+            {events.map((e, i) => (
               <EventRow key={i} event={e} docs={docsForEvent(e, docs)} />
             ))}
           </ul>
         )}
 
-        <PrayerTimesStrip date={day.date} />
-      </article>
+              </article>
     </li>
+  )
+}
+
+function ForecastPeriod({ label, tone, p }: { label: string; tone: string; p: PeriodForecast }) {
+  return (
+    <div className={`rounded-xl border px-3 py-3 ${tone}`}>
+      <p className="text-[11px] font-bold uppercase tracking-widest opacity-70">{label}</p>
+      <div className="flex items-center gap-2 mt-1">
+        <span className="text-3xl leading-none" aria-hidden>
+          {p.icon}
+        </span>
+        <p className="text-2xl font-bold leading-none">{p.temp}°C</p>
+      </div>
+      <p className="text-sm font-semibold mt-2">{p.summary}</p>
+      <p className="text-xs opacity-80 mt-0.5">{p.rainChance}% chance of rain</p>
+    </div>
   )
 }
 
@@ -230,11 +249,13 @@ function HotelLink({ name }: { name: string }) {
 }
 
 // Which of the passenger's documents belong to an event: tickets for their own
-// flight or train, plus the e-visa on the flight that lands in Saudi Arabia.
+// flight or train (first leg only), plus the e-visa on the flight that lands in Saudi Arabia.
 function docsForEvent(event: ItineraryEvent, docs: AttachableDoc[]): AttachableDoc[] {
   if (event.kind === 'flight') {
+    // One ticket covers both legs, so it is shown on the first leg only.
     const lands = event.flight.to.code === 'MED'
-    return docs.filter(d => d.type === 'flight_ticket' || (lands && d.type === 'e_visa'))
+    const firstLeg = [FLIGHTS.outbound[0], FLIGHTS.inbound[0]].includes(event.flight)
+    return docs.filter(d => (firstLeg && d.type === 'flight_ticket') || (lands && d.type === 'e_visa'))
   }
   if (event.kind === 'train') return docs.filter(d => d.type === 'train_ticket')
   return []
@@ -295,10 +316,26 @@ function EventRow({ event, docs }: { event: ItineraryEvent; docs: AttachableDoc[
       title = <>Check out · <HotelLink name={event.hotel} /></>
       detail = event.city
       break
+    case 'prayer':
+      icon = '🕌'
+      title = event.name
+      break
     default:
       icon = '•'
       title = event.title
       detail = event.detail
+  }
+
+  if (event.kind === 'prayer') {
+    return (
+      <li className="my-1.5 rounded-xl bg-[#C4A348]/10 border border-[#C4A348]/30 px-3 py-2.5 flex items-center gap-3 text-sm">
+        <span className="w-12 shrink-0 font-mono text-xs font-semibold text-[#8a6e1f]">{time}</span>
+        <span className="w-5 shrink-0 text-center" aria-hidden>
+          {icon}
+        </span>
+        <p className="font-semibold text-[#6b5314]">{title}</p>
+      </li>
+    )
   }
 
   return (

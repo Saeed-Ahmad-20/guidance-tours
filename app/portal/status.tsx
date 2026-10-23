@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { markPaymentSent, updateLeadContact, uploadPassportPhoto } from '../actions/portal'
+import { markPaymentSent, updatePassengerContact, uploadPassportPhoto } from '../actions/portal'
 import { BANK_DETAILS, cap, formatGBP } from '../lib/booking'
 
 export type PortalReservation = {
@@ -29,6 +29,8 @@ export type PortalReservation = {
     id: string
     given_names: string
     surname: string
+    email: string | null
+    phone: string | null
     person_type: 'adult' | 'infant'
     room_type: 'quad' | 'triple' | 'double'
     room_index: number
@@ -336,12 +338,25 @@ export default function PortalStatus({
           </ul>
         </section>
 
-        {viewer.isLead && (
-          <ContactEditor
-            email={reservation.lead_email || ''}
-            phone={reservation.lead_phone || ''}
-          />
-        )}
+        <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7 mt-5">
+          <h2 className="font-semibold text-stone-900 mb-1">Your Details</h2>
+          <p className="text-sm text-stone-500 mb-1">
+            {viewer.isLead
+              ? 'Add an email address and phone number for yourself and each passenger. Passengers can also add their own.'
+              : 'Add your own email address and phone number.'}
+          </p>
+          <ul className="divide-y divide-stone-100 mt-2">
+            {reservation.passengers.map(p => (
+              <li key={p.id} className="py-3 text-sm">
+                <p className="text-stone-900">
+                  {p.given_names} {p.surname}
+                  {p.person_type === 'infant' && <span className="ml-2 text-xs text-stone-500">(infant)</span>}
+                </p>
+                <ContactEditor passengerId={p.id} email={p.email || ''} phone={p.phone || ''} />
+              </li>
+            ))}
+          </ul>
+        </section>
 
         <p className="text-xs text-stone-400 text-center mt-8">
           Need help? Contact us on WhatsApp at{' '}
@@ -582,7 +597,7 @@ function BankRow({
   )
 }
 
-function ContactEditor({ email, phone }: { email: string; phone: string }) {
+function ContactEditor({ passengerId, email, phone }: { passengerId: string; email: string; phone: string }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [emailVal, setEmailVal] = useState(email)
@@ -590,73 +605,67 @@ function ContactEditor({ email, phone }: { email: string; phone: string }) {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
-  if (!open) {
-    return (
-      <div className="text-center mt-6">
-        <button
-          onClick={() => setOpen(true)}
-          className="text-xs text-stone-400 hover:text-[#C4A348] transition underline"
-        >
-          Update contact details
-        </button>
-      </div>
-    )
-  }
-
   function onSave() {
     setError(null)
     startTransition(async () => {
-      const r = await updateLeadContact(emailVal, phoneVal)
+      const r = await updatePassengerContact(passengerId, emailVal, phoneVal)
       if (r.ok) { setOpen(false); router.refresh() }
       else setError(r.error)
     })
   }
 
+  function onCancel() {
+    setEmailVal(email)
+    setPhoneVal(phone)
+    setError(null)
+    setOpen(false)
+  }
+
+  if (!open) {
+    return (
+      <div className="mt-2 text-xs text-stone-500">
+        {email || phone ? (
+          <p className="break-all">{[email, phone].filter(Boolean).join(' · ')}</p>
+        ) : (
+          <p>No email or phone added yet.</p>
+        )}
+        <button onClick={() => setOpen(true)} className="text-[#C4A348] hover:underline">
+          {email || phone ? 'Edit contact details' : 'Add contact details'}
+        </button>
+      </div>
+    )
+  }
+
   const inputCls = 'rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:border-[#C4A348] focus:ring-2 focus:ring-[#C4A348]/20 outline-none transition w-full'
 
   return (
-    <section className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-7 mt-5">
-      <h2 className="font-semibold text-stone-900 mb-3">Update Contact Details</h2>
-      <div className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-stone-700 font-medium">Email address</span>
-          <input
-            type="email"
-            value={emailVal}
-            onChange={e => setEmailVal(e.target.value)}
-            className={inputCls}
-          />
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-stone-700 font-medium">Phone number</span>
-          <input
-            type="tel"
-            value={phoneVal}
-            onChange={e => setPhoneVal(e.target.value)}
-            className={inputCls}
-          />
-        </label>
-        {error && (
-          <p className="text-sm text-red-600">{error}</p>
-        )}
-        <div className="flex gap-3">
-          <button
-            onClick={onSave}
-            disabled={pending}
-            className="inline-flex items-center justify-center px-5 py-2.5 rounded-full bg-[#C4A348] text-white font-semibold text-sm hover:bg-[#b2932e] transition disabled:opacity-50"
-          >
-            {pending ? 'Saving…' : 'Save changes'}
-          </button>
-          <button
-            onClick={() => setOpen(false)}
-            disabled={pending}
-            className="inline-flex items-center justify-center px-5 py-2.5 rounded-full bg-stone-100 text-stone-700 font-semibold text-sm hover:bg-stone-200 transition disabled:opacity-50"
-          >
-            Cancel
-          </button>
-        </div>
+    <div className="mt-3 flex flex-col gap-3 rounded-xl bg-stone-50 border border-stone-200 p-3">
+      <label className="flex flex-col gap-1 text-xs">
+        <span className="text-stone-700 font-medium">Email address</span>
+        <input type="email" value={emailVal} onChange={e => setEmailVal(e.target.value)} className={inputCls} />
+      </label>
+      <label className="flex flex-col gap-1 text-xs">
+        <span className="text-stone-700 font-medium">Phone number</span>
+        <input type="tel" value={phoneVal} onChange={e => setPhoneVal(e.target.value)} className={inputCls} />
+      </label>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <div className="flex gap-2">
+        <button
+          onClick={onSave}
+          disabled={pending}
+          className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-[#C4A348] text-white font-semibold text-xs hover:bg-[#b2932e] transition disabled:opacity-50"
+        >
+          {pending ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={pending}
+          className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-stone-100 text-stone-700 font-semibold text-xs hover:bg-stone-200 transition disabled:opacity-50"
+        >
+          Cancel
+        </button>
       </div>
-    </section>
+    </div>
   )
 }
 

@@ -1,4 +1,6 @@
 import { requirePortalSession } from '../../lib/portal-session'
+import { loadForecasts } from '../itinerary/forecast'
+import { ITINERARY } from '../itinerary/itinerary-data'
 import { buildCatalogue } from './catalogue'
 import { loadAttachableDocuments } from './documents'
 import PdfBuilder from './pdf-builder'
@@ -7,7 +9,8 @@ export const dynamic = 'force-dynamic'
 
 export default async function PortalPdfPage() {
   const session = await requirePortalSession()
-  const groups = buildCatalogue()
+  const forecasts = await loadForecasts(ITINERARY[0].date, ITINERARY[ITINERARY.length - 1].date)
+  const groups = buildCatalogue(forecasts)
   const documents = await loadAttachableDocuments(session)
 
   return (
