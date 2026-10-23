@@ -5,6 +5,15 @@ import { adminLogout } from '../../actions/admin'
 
 export const dynamic = 'force-dynamic'
 
+const NAV = [
+  { href: '/admin', label: 'Dashboard' },
+  { href: '/admin/rooms', label: 'Room allocations' },
+  { href: '/admin/finance', label: 'Financial breakdown' },
+  { href: '/admin/documents', label: 'Travel documents' },
+  { href: '/admin/contacts', label: 'Contacts' },
+  { href: '/admin/webinars', label: 'Webinars' },
+]
+
 export default async function AdminAuthedLayout({
   children,
 }: {
@@ -25,24 +34,11 @@ export default async function AdminAuthedLayout({
               Guidance Admin
             </Link>
             <nav className="hidden sm:flex items-center gap-5 text-sm">
-              <Link href="/admin" className="text-stone-300 hover:text-white transition">
-                Dashboard
-              </Link>
-              <Link href="/admin/rooms" className="text-stone-300 hover:text-white transition">
-                Room allocations
-              </Link>
-              <Link href="/admin/finance" className="text-stone-300 hover:text-white transition">
-                Financial breakdown
-              </Link>
-              <Link href="/admin/documents" className="text-stone-300 hover:text-white transition">
-                Travel documents
-              </Link>
-              <Link href="/admin/contacts" className="text-stone-300 hover:text-white transition">
-                Contacts
-              </Link>
-              <Link href="/admin/webinars" className="text-stone-300 hover:text-white transition">
-                Webinars
-              </Link>
+              {NAV.map(l => (
+                <Link key={l.href} href={l.href} className="text-stone-300 hover:text-white transition">
+                  {l.label}
+                </Link>
+              ))}
             </nav>
           </div>
           <div className="flex items-center gap-3">
@@ -59,6 +55,16 @@ export default async function AdminAuthedLayout({
             </form>
           </div>
         </div>
+        <nav
+          className="sm:hidden border-t border-stone-800 px-4 flex gap-5 overflow-x-auto text-sm"
+          aria-label="Admin pages"
+        >
+          {NAV.map(l => (
+            <Link key={l.href} href={l.href} className="whitespace-nowrap py-3 text-stone-300 hover:text-white transition">
+              {l.label}
+            </Link>
+          ))}
+        </nav>
       </header>
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">{children}</main>
     </div>
