@@ -1,11 +1,7 @@
 'use client'
 
-import { Amiri } from 'next/font/google'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { AttachableDoc, CatalogueGroup } from './catalogue'
-
-// Naskh font for the Arabic du'as in the PDF. It downloads only when a PDF is made.
-const amiri = Amiri({ weight: '400', subsets: ['arabic'], display: 'swap', preload: false })
 
 type Category = { key: string; title: string; blurb: string; accent: string; ring: string; chip: string }
 
@@ -205,7 +201,7 @@ export default function PdfBuilder({
                 keyPoints,
                 mapLinks,
                 coverImage: '/images/sites/kaabah.jpg',
-                arabic: browserArabicRenderer(amiri.style.fontFamily),
+                arabic: browserArabicRenderer('/fonts/Amiri-Regular.ttf'),
               },
               browserImageLoader,
               (done, total) => setProgress(`Building… ${done} of ${total}`),

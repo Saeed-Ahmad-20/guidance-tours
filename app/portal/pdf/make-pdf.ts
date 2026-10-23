@@ -92,12 +92,25 @@ const AR_PX_PER_MM = 10 // about 250 dpi
 const AR_SIZE_PT = 15
 
 // Renders Arabic right to left in the given font, wrapping on spaces, as a transparent PNG.
-export function browserArabicRenderer(fontFamily: string): ArabicRenderer {
+export function browserArabicRenderer(fontUrl: string): ArabicRenderer {
+  const family = 'AmiriPdf'
+  let loading: Promise<void> | null = null
+  // Loads the font file once. If it fails, the system's Arabic fonts are used instead.
+  const ensureFont = () =>
+    (loading ??= (async () => {
+      try {
+        const face = new FontFace(family, `url(${fontUrl})`)
+        await face.load()
+        document.fonts.add(face)
+      } catch {
+        /* fall back to system fonts */
+      }
+    })())
   return async (text, widthMm) => {
     try {
       const px = Math.round(AR_SIZE_PT * 0.3528 * AR_PX_PER_MM)
-      const font = `${px}px ${fontFamily}`
-      await document.fonts.load(font, text)
+      const font = `${px}px ${family}, "Geeza Pro", "Noto Naskh Arabic", "Segoe UI", Tahoma, Arial, serif`
+      await ensureFont()
       const width = Math.round(widthMm * AR_PX_PER_MM)
       const pad = Math.round(px * 0.3) // room for the harakat above and below, and at the edges
       const canvas = document.createElement('canvas')
