@@ -37,6 +37,9 @@ export default async function AdminAuthedLayout({
               <Link href="/admin/documents" className="text-stone-300 hover:text-white transition">
                 Travel documents
               </Link>
+              <Link href="/admin/contacts" className="text-stone-300 hover:text-white transition">
+                Contacts
+              </Link>
               <Link href="/admin/webinars" className="text-stone-300 hover:text-white transition">
                 Webinars
               </Link>
