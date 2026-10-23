@@ -648,6 +648,58 @@ export async function deleteRoomAllocation(roomAllocationId: string): Promise<Ad
   return { ok: true }
 }
 
+// Bookings made separately that are actually travelling together. Their key cards go to one lead passenger.
+export async function linkBookings(tourId: string, codesText: string): Promise<AdminActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const codes = [...new Set(codesText.split(/[\s,;+]+/).map(c => c.trim()).filter(Boolean))]
+  if (codes.length < 2) return { ok: false, error: 'Enter at least two booking codes.' }
+
+  const db = supabaseAdmin()
+  const { data, error } = await db
+    .from('reservations')
+    .select('id, reservation_code, travel_group')
+    .eq('tour_id', tourId)
+    .in('reservation_code', codes)
+  if (error) {
+    console.error('linkBookings error:', error.message)
+    return { ok: false, error: 'Could not link the bookings.' }
+  }
+  const found = (data ?? []) as Array<{ id: string; reservation_code: string; travel_group: string | null }>
+  const unknown = codes.filter(c => !found.some(f => f.reservation_code === c))
+  if (unknown.length > 0) return { ok: false, error: `No booking found for: ${unknown.join(', ')}. Codes are case-sensitive.` }
+
+  // Join any group one of them is already in, bringing along everyone in it.
+  const group = found.find(f => f.travel_group)?.travel_group ?? randomUUID()
+  const existing = [...new Set(found.map(f => f.travel_group).filter((g): g is string => Boolean(g)))]
+  const filter = [`id.in.(${found.map(f => f.id).join(',')})`, ...existing.map(g => `travel_group.eq.${g}`)].join(',')
+  const { error: upErr } = await db.from('reservations').update({ travel_group: group }).or(filter)
+  if (upErr) {
+    console.error('linkBookings update error:', upErr.message)
+    return { ok: false, error: 'Could not link the bookings.' }
+  }
+
+  revalidatePath('/admin/rooms')
+  return { ok: true }
+}
+
+export async function unlinkTravelGroup(groupId: string): Promise<AdminActionResult> {
+  await assertSameOrigin()
+  const admin = await requireAdmin().catch(() => null)
+  if (!admin) return { ok: false, error: 'Not authorised.' }
+
+  const { error } = await supabaseAdmin().from('reservations').update({ travel_group: null }).eq('travel_group', groupId)
+  if (error) {
+    console.error('unlinkTravelGroup error:', error.message)
+    return { ok: false, error: 'Could not unlink the bookings.' }
+  }
+
+  revalidatePath('/admin/rooms')
+  return { ok: true }
+}
+
 export type AssignRoomResult = { ok: true; warning?: string } | { ok: false; error: string }
 
 export async function assignPassengerToRoom(

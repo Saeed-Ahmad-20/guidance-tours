@@ -12,16 +12,7 @@ export type ContactRow = {
   reservationCode: string
   tourId: string
   tourLabel: string
-  status: 'pending_payment' | 'transfer_submitted' | 'confirmed' | 'expired' | 'cancelled'
   isLead: boolean
-}
-
-const STATUS_LABEL: Record<ContactRow['status'], string> = {
-  pending_payment: 'Awaiting transfer',
-  transfer_submitted: 'Awaiting confirmation',
-  confirmed: 'Confirmed',
-  expired: 'Expired',
-  cancelled: 'Cancelled',
 }
 
 function toggle<T>(set: Set<T>, value: T): Set<T> {
@@ -49,16 +40,12 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 export default function ContactsExport({ rows, tours }: { rows: ContactRow[]; tours: { id: string; label: string }[] }) {
   const [search, setSearch] = useState('')
   const [tourIds, setTourIds] = useState<Set<string>>(new Set())
-  // Cancelled and expired bookings are hidden until asked for.
-  const [statuses, setStatuses] = useState<Set<ContactRow['status']>>(
-    new Set(['pending_payment', 'transfer_submitted', 'confirmed'])
-  )
   const [picked, setPicked] = useState<Set<string>>(new Set())
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase()
     return rows
-      .filter(r => (tourIds.size === 0 || tourIds.has(r.tourId)) && (statuses.size === 0 || statuses.has(r.status)))
+      .filter(r => tourIds.size === 0 || tourIds.has(r.tourId))
       .filter(
         r =>
           !q ||
@@ -68,7 +55,7 @@ export default function ContactsExport({ rows, tours }: { rows: ContactRow[]; to
           (r.phone ?? '').toLowerCase().includes(q)
       )
       .sort((a, b) => `${a.givenNames} ${a.surname}`.localeCompare(`${b.givenNames} ${b.surname}`))
-  }, [rows, search, tourIds, statuses])
+  }, [rows, search, tourIds])
 
   const chosen = picked.size > 0 ? shown.filter(r => picked.has(r.id)) : shown
   const exportable = chosen.filter(r => r.email || r.phone)
@@ -128,14 +115,6 @@ export default function ContactsExport({ rows, tours }: { rows: ContactRow[]; to
             ))}
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 mr-0.5">Status</span>
-          {(Object.keys(STATUS_LABEL) as ContactRow['status'][]).map(s => (
-            <Chip key={s} active={statuses.has(s)} onClick={() => setStatuses(prev => toggle(prev, s))}>
-              {STATUS_LABEL[s]}
-            </Chip>
-          ))}
-        </div>
       </div>
 
       <p className="text-xs text-stone-500">

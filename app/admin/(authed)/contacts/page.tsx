@@ -10,7 +10,6 @@ type Reservation = {
   reservation_code: string
   lead_email: string | null
   lead_phone: string | null
-  status: ContactRow['status']
 }
 type Passenger = {
   id: string
@@ -28,7 +27,8 @@ export default async function AdminContactsPage() {
     db.from('tours').select('id, slug').order('departure_date', { ascending: false }),
     db
       .from('reservations')
-      .select('id, tour_id, reservation_code, lead_email, lead_phone, status')
+      .select('id, tour_id, reservation_code, lead_email, lead_phone')
+      .eq('status', 'confirmed')
       .order('created_at', { ascending: false }),
     db
       .from('reservation_passengers')
@@ -60,7 +60,6 @@ export default async function AdminContactsPage() {
         reservationCode: r.reservation_code,
         tourId: r.tour_id,
         tourLabel: tourLabel.get(r.tour_id) ?? '—',
-        status: r.status,
         isLead,
       },
     ]
@@ -71,7 +70,7 @@ export default async function AdminContactsPage() {
       <div>
         <h1 className="text-xl font-bold text-stone-900">Contacts</h1>
         <p className="text-sm text-stone-500 mt-1">
-          Every passenger’s own email and phone number. Tick the people you want, or filter and save everyone shown, then
+          Every confirmed passenger’s own email and phone number. Tick the people you want, or filter and save everyone shown, then
           open the downloaded file on your phone to add them to your contacts.
         </p>
       </div>
