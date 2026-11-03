@@ -205,7 +205,7 @@ type Greeting = {
   titleSize: number
 }
 
-const SIGNATORIES = ['Shaykh Waseen Ahmed', 'Shaykh Saqib Rashid', 'Guidance Tours Team']
+const SIGNATORIES = ['Shaykh Waseem Ahmed', 'Shaykh Saqib Rashid', 'Guidance Tours Team']
 
 // The talbiyah recording that plays with the animation and goes into the video. Drop the file in
 // public/audio; the sound controls only appear once it loads.
