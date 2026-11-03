@@ -225,6 +225,12 @@ function loadLogo() {
 
 type Words = Array<{ text: string; y: number; size: number; font: string; title: boolean; rtl: boolean }>
 
+// A font that fails to download (a patchy connection, or a page left open across a deploy) falls
+// back to its similar built-in face instead of stopping the certificate.
+function loadFont(spec: string, text: string) {
+  return document.fonts.load(spec, text).catch(() => [])
+}
+
 // The renderer needs the fonts (to trace the words) and the logo before it starts.
 async function loadAssets(name: string, lang: Lang): Promise<{ greeting: Greeting; logo: HTMLImageElement | null }> {
   const copy = COPY[lang]
@@ -233,9 +239,9 @@ async function loadAssets(name: string, lang: Lang): Promise<{ greeting: Greetin
   const sample = copy.title.join(' ')
   const [logo] = await Promise.all([
     loadLogo(),
-    document.fonts.load(`700 100px ${serif}`, name),
-    document.fonts.load(`italic 600 100px ${serif}`, name),
-    ...(script ? [document.fonts.load(`700 100px ${script}`, sample), document.fonts.load(`400 100px ${script}`, sample)] : []),
+    loadFont(`700 100px ${serif}`, name),
+    loadFont(`italic 600 100px ${serif}`, name),
+    ...(script ? [loadFont(`700 100px ${script}`, sample), loadFont(`400 100px ${script}`, sample)] : []),
   ])
   await document.fonts.ready
   const sans = getComputedStyle(document.body).fontFamily || 'sans-serif'
