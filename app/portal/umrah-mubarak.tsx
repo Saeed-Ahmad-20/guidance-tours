@@ -933,6 +933,11 @@ async function talbiyahTrack(seconds: number) {
   }
 }
 
+// Errors are shown on the page rather than swallowed, so a failure on someone's phone can be reported.
+function describe(e: unknown) {
+  return e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+}
+
 function fileSlug(name: string, lang: Lang, theme: ThemeName) {
   const who = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'card'
   return ['umrah-certificate', who, lang === 'en' ? null : lang, theme].filter(Boolean).join('-')
@@ -960,6 +965,7 @@ export default function UmrahMubarak({ name, siteUrl }: { name: string; siteUrl:
   // blocked, their first tap anywhere starts it at the point the animation has reached.
   const [soundOn, setSoundOn] = useState(true)
   const [blocked, setBlocked] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
   const startedAt = useRef(0)
   const [{ gregorian, islamic }] = useState(() => todayLabels(new Date()))
 
@@ -991,7 +997,12 @@ export default function UmrahMubarak({ name, siteUrl }: { name: string; siteUrl:
           if (audio && !audio.paused) audio.currentTime = 0
         }
         const t = now - start
-        r.frame(t, Math.min(50, now - last))
+        try {
+          r.frame(t, Math.min(50, now - last))
+        } catch (e) {
+          setFailure(describe(e))
+          return
+        }
         last = now
         if (!finished && t >= DONE_MS) {
           finished = true
@@ -1000,6 +1011,8 @@ export default function UmrahMubarak({ name, siteUrl }: { name: string; siteUrl:
         frame = requestAnimationFrame(tick)
       }
       frame = requestAnimationFrame(tick)
+    }).catch(e => {
+      if (!cancelled) setFailure(describe(e))
     })
 
     return () => {
@@ -1143,6 +1156,11 @@ export default function UmrahMubarak({ name, siteUrl }: { name: string; siteUrl:
             ↻ Replay
           </button>
         )}
+        {failure && (
+          <p className="absolute inset-x-3 bottom-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">
+            The animation couldn’t start on this device ({failure}).
+          </p>
+        )}
       </section>
 
       <ShareBar key={`${theme}-${lang}`} name={name} labels={{ gregorian, islamic }} lang={lang} theme={theme} siteUrl={siteUrl} ready={done} />
@@ -1171,6 +1189,7 @@ function ShareBar({
   const [video, setVideo] = useState<Media | null>(null)
   const [progress, setProgress] = useState<number | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [preparing, setPreparing] = useState(false)
   const [support, setSupport] = useState({ shareFiles: false, video: null as string | null })
 
   // Browser capabilities are only known after hydration.
@@ -1182,14 +1201,29 @@ function ShareBar({
   }, [])
 
   const slug = fileSlug(name, lang, theme)
-  const caption = `Alhamdulillah, Umrah complete. Umrah Mubarak! 🕋\n${labels.gregorian}${labels.islamic ? ` · ${labels.islamic}` : ''}`
+  const caption = `Alhamdulillah, Umrah Mubarak! 🕋`
 
   async function getImage() {
     if (image) return image
-    const blob = await makeImage(name, lang, theme)
-    const media = { blob, file: new File([blob], `${slug}.png`, { type: 'image/png' }) }
-    setImage(media)
-    return media
+    setPreparing(true)
+    try {
+      const blob = await makeImage(name, lang, theme)
+      const media = { blob, file: new File([blob], `${slug}.png`, { type: 'image/png' }) }
+      setImage(media)
+      return media
+    } finally {
+      setPreparing(false)
+    }
+  }
+
+  // Runs a share or download, reporting anything that goes wrong.
+  async function attempt(action: () => Promise<void>) {
+    setMessage(null)
+    try {
+      await action()
+    } catch (e) {
+      setMessage(`Couldn’t create the certificate on this device (${describe(e)}).`)
+    }
   }
 
   // Have the image ready before anyone taps share: iOS only allows sharing straight after a tap.
@@ -1254,19 +1288,22 @@ function ShareBar({
 
       <div className="flex flex-wrap gap-2">
         {support.shareFiles && (
-          <button type="button" className={primary} onClick={async () => share(await getImage())}>
-            Share certificate
+          <button type="button" className={primary} disabled={preparing} onClick={() => attempt(async () => share(await getImage()))}>
+            {preparing ? 'Preparing…' : 'Share certificate'}
           </button>
         )}
         <button
           type="button"
           className={support.shareFiles ? secondary : primary}
-          onClick={async () => {
-            const media = await getImage()
-            saveBlob(media.blob, media.file.name)
-          }}
+          disabled={preparing}
+          onClick={() =>
+            attempt(async () => {
+              const media = await getImage()
+              saveBlob(media.blob, media.file.name)
+            })
+          }
         >
-          ↓ Download certificate
+          {preparing ? 'Preparing…' : '↓ Download certificate'}
         </button>
 
         {support.video && !video && (
